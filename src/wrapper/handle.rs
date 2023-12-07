@@ -1,8 +1,10 @@
 use std::ptr::null_mut;
 
 use crate::native::{
-    yacAllocHandle, yacFreeHandle, EnYacHandleType_YAC_HANDLE_DBC, EnYacHandleType_YAC_HANDLE_ENV,
-    EnYacHandleType_YAC_HANDLE_STMT, EnYacResult_YAC_ERROR, YacHandle,
+    yacAllocHandle, yacFreeHandle, yacSetEnvAttr, EnYacCharsetCode_YAC_CHARSET_UTF8,
+    EnYacEnvAttr_YAC_ATTR_CHARSET_CODE, EnYacHandleType_YAC_HANDLE_DBC,
+    EnYacHandleType_YAC_HANDLE_ENV, EnYacHandleType_YAC_HANDLE_STMT, EnYacResult_YAC_ERROR,
+    YacHandle,
 };
 
 use super::Error;
@@ -50,3 +52,18 @@ macro_rules! handle {
 handle! {EnvHandle => EnYacHandleType_YAC_HANDLE_ENV;}
 handle! {DbcHandle => EnYacHandleType_YAC_HANDLE_DBC; EnvHandle}
 handle! {StatementHandle => EnYacHandleType_YAC_HANDLE_STMT; DbcHandle}
+
+impl EnvHandle {
+    pub fn with_utf8(self) -> Self {
+        let v = EnYacCharsetCode_YAC_CHARSET_UTF8 as usize;
+        unsafe {
+            yacSetEnvAttr(
+                self.0,
+                EnYacEnvAttr_YAC_ATTR_CHARSET_CODE,
+                &v as *const _ as *mut _,
+                std::mem::size_of_val(&v) as _,
+            );
+        };
+        self
+    }
+}

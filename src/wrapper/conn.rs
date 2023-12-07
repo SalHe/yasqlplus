@@ -9,7 +9,7 @@ pub struct Connection {
 
 impl Connection {
     pub fn connect(host: &str, port: u16, username: &str, password: &str) -> Result<Self, Error> {
-        let env_handle = EnvHandle::new()?;
+        let env_handle = EnvHandle::new()?.with_utf8();
         let conn_handle = DbcHandle::new(&env_handle)?;
 
         let url = format!("{host}:{port}");
