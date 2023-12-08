@@ -20,7 +20,7 @@ impl Display for DiagInfo {
                     let mut lines = sql.lines().collect::<Vec<_>>();
                     let indent = " ".repeat((column - 1) as _);
                     let message = &self.message;
-                    let indicator = format!("{indent}^ {message}",);
+                    let indicator = format!("{indent}^ {message}");
                     lines.insert(line as _, &indicator);
                     write!(f, "{}", lines.join("\n"))
                 }
@@ -54,19 +54,35 @@ pub fn get_error(sql: Option<String>) -> Option<DiagInfo> {
     {
         None
     } else {
+        let message = CStr::from_bytes_until_nul(&message[..])
+            .ok()?
+            .to_str()
+            .ok()?
+            .to_string();
+        let lines = message.lines().collect::<Vec<_>>();
+        let (message, pos) = if matches!(lines.first(), Some(&"PL/SQL compiling errors:")) {
+            let (pos, message) = lines.get(1).unwrap().split_once(' ').unwrap();
+            let pos = pos
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .split_once(':')
+                .unwrap();
+            let pos = (pos.0.parse::<i32>().unwrap(), pos.1.parse::<i32>().unwrap());
+            (message.to_string(), pos)
+        } else {
+            (message, (pos.line, pos.column))
+        };
+
+        let sql_state = CStr::from_bytes_until_nul(&sql_state[..])
+            .ok()?
+            .to_str()
+            .ok()?
+            .to_string();
         Some(DiagInfo {
-            message: CStr::from_bytes_until_nul(&message[..])
-                .ok()?
-                .to_str()
-                .ok()?
-                .to_string(),
-            sql_state: CStr::from_bytes_until_nul(&sql_state[..])
-                .ok()?
-                .to_str()
-                .ok()?
-                .to_string(),
+            message,
+            sql_state,
             code: err_code,
-            pos: (pos.line, pos.column),
+            pos,
             sql,
         })
     }
