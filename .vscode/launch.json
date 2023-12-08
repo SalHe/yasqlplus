@@ -9,9 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/yasqlplus",
-            "args": [
-                "select\\ *\\ 1231"
-            ],
+            "args": [],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [

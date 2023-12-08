@@ -13,7 +13,7 @@ use crate::{
 };
 
 #[repr(u32)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Type {
     Unknown = 0,
     Bool = 1,
@@ -49,7 +49,7 @@ impl Default for Type {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Column {
     pub display_size: usize,
     pub name: String,
@@ -69,12 +69,12 @@ pub struct ColumnsIterator<'a> {
 }
 
 impl<'a> ColumnsIterator<'a> {
-    pub(crate) fn new(result_set: &'a ResultSet) -> Result<Self, Error> {
-        Ok(Self {
+    pub(crate) fn new(result_set: &'a ResultSet) -> Self {
+        Self {
             curr: Cell::new(0),
-            columns: result_set.columns()?,
+            columns: result_set.columns(),
             result_set,
-        })
+        }
     }
 }
 
