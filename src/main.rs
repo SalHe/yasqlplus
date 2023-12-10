@@ -4,9 +4,9 @@ use inquire::{
     CustomType, Password, Text,
 };
 use tabled::{settings::Style, Table};
-use yasqlplus::wrapper::{get_connect_info, Connection, Executed};
+use yasqlplus::wrapper::{get_connect_info, Connection, Error, Executed};
 
-fn app() -> anyhow::Result<()> {
+fn create_connection() -> Result<Connection, Error> {
     let conf = get_connect_info();
 
     let host = conf.host.unwrap_or(
@@ -35,8 +35,21 @@ fn app() -> anyhow::Result<()> {
             .unwrap(),
     );
 
-    let connection = Connection::connect(&host, port, &username, &password)?;
+    Connection::connect(&host, port, &username, &password)
+}
 
+fn get_sql() -> anyhow::Result<(String, bool)> {
+    let sql = Text::new("").prompt()?;
+    if sql.to_lowercase().starts_with("desc ") {
+        let table_or_view = sql.split_once(' ').unwrap().1;
+        Ok((format!("select * from {table_or_view} where 1 = 2"), true))
+    } else {
+        Ok((sql, false))
+    }
+}
+
+fn app() -> anyhow::Result<()> {
+    let mut connection = create_connection()?;
     let mut error_occured = false;
     loop {
         {
@@ -55,16 +68,16 @@ fn app() -> anyhow::Result<()> {
             error_occured = false;
         }
 
-        let sql = Text::new("").prompt()?;
+        let (sql, desc) = get_sql()?;
         if sql.is_empty() {
             continue;
         }
-        let (sql, desc) = if sql.to_lowercase().starts_with("desc ") {
-            let table_or_view = sql.split_once(' ').unwrap().1;
-            (format!("select * from {table_or_view} where 1 = 2"), true)
-        } else {
-            (sql, false)
-        };
+
+        if sql.to_lowercase() == "conn" {
+            set_global_render_config(RenderConfig::default());
+            connection = create_connection()?;
+            continue;
+        }
 
         let statment = match connection.create_statment() {
             Ok(stmt) => stmt,
@@ -113,7 +126,7 @@ fn app() -> anyhow::Result<()> {
                 }
             }
             Executed::DML(affection) => {
-                println!("Affected: {}", affection.affected())
+                println!("{} row(s) affected", affection.affected())
             }
             Executed::DCL(_instrction) => println!("DCL exectued"),
             Executed::Unknown(_) => println!("Succeed"),
