@@ -1,33 +1,105 @@
+use inquire::{
+    set_global_render_config,
+    ui::{RenderConfig, Styled},
+    CustomType, Password, Text,
+};
+use tabled::{settings::Style, Table};
 use yasqlplus::wrapper::{get_connect_info, Connection, Executed};
 
 fn main() -> anyhow::Result<()> {
-    let conf = get_connect_info()?;
-    let connection = Connection::connect(&conf.host, conf.port, &conf.username, &conf.password)?;
-    let statment = connection.create_statment()?;
+    let conf = get_connect_info();
 
-    let sql = std::env::args()
-        .nth(1)
-        .unwrap_or("select * from t1".to_string());
+    let host = conf.host.unwrap_or(
+        Text::new("YashanDB host")
+            .with_default("127.0.0.1")
+            .prompt()
+            .unwrap(),
+    );
+    let port = conf.port.unwrap_or(
+        CustomType::<u16>::new("YashanDB port")
+            .with_default(1688)
+            .prompt()
+            .unwrap(),
+    );
+    let username = conf.username.unwrap_or(
+        Text::new("YashanDB username")
+            .with_default("sys")
+            .prompt()
+            .unwrap(),
+    );
+    let password = conf.password.unwrap_or(
+        Password::new("YashanDB password")
+            .without_confirmation()
+            .with_display_mode(inquire::PasswordDisplayMode::Masked)
+            .prompt()
+            .unwrap(),
+    );
 
-    let result = statment.execute_sql(&sql)?;
+    let connection = Connection::connect(&host, port, &username, &password)?;
 
-    match result.resolve()? {
-        Executed::DQL(result) => {
-            println!("Columns {}: ", result.columns());
-            for col in result.iter_columns() {
-                println!("    {:?}", col);
+    set_global_render_config(RenderConfig::default().with_prompt_prefix(Styled::new("SQL >")));
+
+    loop {
+        let sql = Text::new("").prompt()?;
+        if sql.is_empty() {
+            continue;
+        }
+
+        let (sql, desc) = if sql.to_lowercase().starts_with("desc ") {
+            let table_or_view = sql.split_once(' ').unwrap().1;
+            (format!("select * from {table_or_view} where 1 = 2"), true)
+        } else {
+            (sql, false)
+        };
+
+        let statment = match connection.create_statment() {
+            Ok(stmt) => stmt,
+            Err(err) => {
+                println!("{err}");
+                continue;
             }
+        };
+        let result = match statment.execute_sql(&sql) {
+            Ok(executed) => executed,
+            Err(err) => {
+                println!("{err}");
+                continue;
+            }
+        };
+        let resolved = match result.resolve() {
+            Ok(resolved) => resolved,
+            Err(err) => {
+                println!("{err}");
+                continue;
+            }
+        };
 
-            let rows = result.rows().collect::<Vec<_>>();
-            println!("{rows:?}");
-            println!("{} row(s) fetched", rows.len());
+        match resolved {
+            Executed::DQL(result) => {
+                let columns = result.iter_columns().collect::<Vec<_>>();
+                let (mut table, rows) = if desc {
+                    (Table::new(columns), None)
+                } else {
+                    let mut builder = tabled::builder::Builder::default();
+                    let rows = result.rows().collect::<Vec<_>>();
+                    rows.iter().for_each(|row| {
+                        builder.push_record(row.iter().map(|x| format!("{x}")));
+                    });
+                    builder.insert_record(0, columns.iter().map(|x| x.name.clone()));
+                    (builder.build(), Some(rows.len()))
+                };
+                let table = table.with(Style::rounded());
+                println!("{table}");
+
+                if let Some(rows) = rows {
+                    println!("{} row(s) fetched", rows);
+                }
+            }
+            Executed::DML(affection) => {
+                println!("Affected: {}", affection.affected())
+            }
+            Executed::DCL(_instrction) => println!("DCL exectued"),
+            Executed::Unknown(_) => println!("Succeed"),
         }
-        Executed::DML(affection) => {
-            println!("Affected: {}", affection.affected())
-        }
-        Executed::DCL(_instrction) => println!("DCL exectued"),
-        Executed::Unknown(_) => unreachable!(),
     }
-
-    Ok(())
 }

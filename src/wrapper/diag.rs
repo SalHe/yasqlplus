@@ -18,6 +18,9 @@ impl Display for DiagInfo {
             (line, column) => match &self.sql {
                 Some(sql) => {
                     let mut lines = sql.lines().collect::<Vec<_>>();
+                    if lines.is_empty() {
+                        lines.push("");
+                    }
                     let indent = " ".repeat((column - 1) as _);
                     let message = &self.message;
                     let indicator = format!("{indent}^ {message}");

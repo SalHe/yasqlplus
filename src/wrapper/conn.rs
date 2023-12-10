@@ -87,8 +87,8 @@ mod test {
 
     fail_test!(fail_to_connect_socket: "127.0.0.1", 9999, "hello", "world" => "failed to connect socket");
     fail_test!(wrong_authentication: 
-        &get_connect_info().unwrap().host,
-        get_connect_info().unwrap().port,
+        &get_connect_info().host.unwrap(),
+        get_connect_info().port.unwrap(),
         "invalid username", "invalid password"
         => "invalid username/password");
 }

@@ -1,4 +1,6 @@
-use std::{cell::Cell, ffi::CStr, ptr::null_mut};
+use std::{cell::Cell, ffi::CStr, fmt::Display, ptr::null_mut};
+
+use tabled::Tabled;
 
 use crate::{
     native::{
@@ -43,13 +45,47 @@ pub enum Type {
     Json = 35,
 }
 
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let t = match self {
+            Type::Unknown => "<UNKNOWN>",
+            Type::Bool => "BOOL",
+            Type::TinyInt => "TINYINT",
+            Type::SmallInt => "SMALLINT",
+            Type::Integer => "INTEGER",
+            Type::BigInt => "BIGINT",
+            Type::Float => "FLOAT",
+            Type::Double => "DOUBLE",
+            Type::Number => "NUMBER",
+            Type::Date => "DATE",
+            Type::ShortTime => "SHORTTIME",
+            Type::Timestamp => "TIMESTAMP",
+            Type::YmInterval => "YMINTERVAL",
+            Type::DsInterval => "DSINTERVAL",
+            Type::Char => "CHAR",
+            Type::NChar => "NCHAR",
+            Type::VarChar => "VARCHAR",
+            Type::NVarChar => "NVARCHAR",
+            Type::Binary => "BINARY",
+            Type::Clob => "CLOB",
+            Type::Blob => "BLOB",
+            Type::Bit => "BIT",
+            Type::RowId => "ROWID",
+            Type::NClob => "NCLOB",
+            Type::Cursor => "CURSOR",
+            Type::Json => "JSON",
+        };
+        t.fmt(f)
+    }
+}
+
 impl Default for Type {
     fn default() -> Self {
         Self::Unknown
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Tabled)]
 pub struct Column {
     pub display_size: usize,
     pub name: String,

@@ -1,4 +1,4 @@
-use std::{ffi::CStr, ptr::null_mut};
+use std::{ffi::CStr, fmt::Display, ptr::null_mut};
 
 use crate::native::yacBindColumn;
 
@@ -33,8 +33,32 @@ pub enum Value {
     VarChar(String),
     NChar(String),
     NVarChar(String),
-    Date, // TODO
-    Time, // TODO
+    Date,        // TODO
+    Time,        // TODO
+    Unsupported, // TODO
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Bool(v) => v.fmt(f),
+            Value::TinyInt(v) => v.fmt(f),
+            Value::SmallInt(v) => v.fmt(f),
+            Value::Integer(v) => v.fmt(f),
+            Value::BigInt(v) => v.fmt(f),
+            Value::Float(v) => v.fmt(f),
+            Value::Double(v) => v.fmt(f),
+            Value::Number(v) => format!("{v:?}").fmt(f),
+            Value::Bit(v) => v.fmt(f),
+            Value::Char(v) => v.fmt(f),
+            Value::VarChar(v) => v.fmt(f),
+            Value::NChar(v) => v.fmt(f),
+            Value::NVarChar(v) => v.fmt(f),
+            Value::Date => "DATE?".fmt(f),
+            Value::Time => "TIME?".fmt(f),
+            Value::Unsupported => "UNSUPPORTED?".fmt(f),
+        }
+    }
 }
 
 macro_rules! sized_value {
@@ -118,3 +142,13 @@ string_value! {Char     @ 4096 => Type::Char}
 string_value! {NChar    @ 4096 => Type::NChar}
 string_value! {VarChar  @ 4096 => Type::VarChar}
 string_value! {NVarChar @ 4096 => Type::NVarChar}
+
+pub struct Unsupported;
+
+impl Binder for Unsupported {
+    unsafe fn bind_column(&mut self, _result_set: &ResultSet, _column: usize) {}
+
+    unsafe fn get_data(&self) -> Value {
+        Value::Unsupported
+    }
+}

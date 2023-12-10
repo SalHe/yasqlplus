@@ -2,7 +2,7 @@ use crate::native::{yacFetch, EnYacResult_YAC_ERROR};
 
 use super::{
     BigInt, Binder, Bool, Char, Column, Double, Float, Integer, NChar, NVarChar, Number, ResultSet,
-    SmallInt, TinyInt, Type, Value, VarChar,
+    SmallInt, TinyInt, Type, Unsupported, Value, VarChar,
 };
 
 pub struct Row {}
@@ -35,7 +35,7 @@ impl RowsIterator {
                     Type::NChar => Box::<NChar>::default(),
                     Type::VarChar => Box::<VarChar>::default(),
                     Type::NVarChar => Box::<NVarChar>::default(),
-                    _ => unimplemented!(),
+                    _ => Box::<Unsupported>::new(Unsupported),
                 }
             })
             .collect::<Vec<_>>();
