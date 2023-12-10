@@ -1,12 +1,12 @@
 use inquire::{
     set_global_render_config,
-    ui::{RenderConfig, Styled},
+    ui::{Color, RenderConfig, Styled},
     CustomType, Password, Text,
 };
 use tabled::{settings::Style, Table};
 use yasqlplus::wrapper::{get_connect_info, Connection, Executed};
 
-fn main() -> anyhow::Result<()> {
+fn app() -> anyhow::Result<()> {
     let conf = get_connect_info();
 
     let host = conf.host.unwrap_or(
@@ -37,14 +37,28 @@ fn main() -> anyhow::Result<()> {
 
     let connection = Connection::connect(&host, port, &username, &password)?;
 
-    set_global_render_config(RenderConfig::default().with_prompt_prefix(Styled::new("SQL >")));
-
+    let mut error_occured = false;
     loop {
+        {
+            // update prompt color
+            let prompt = "SQL >";
+            let mut config = RenderConfig::default().with_prompt_prefix(
+                Styled::new(prompt).with_fg(if error_occured {
+                    Color::LightRed
+                } else {
+                    Color::LightGreen
+                }),
+            );
+            config.answered_prompt_prefix = Styled::new(prompt);
+            config.canceled_prompt_indicator = Styled::new(prompt).with_fg(Color::Grey);
+            set_global_render_config(config);
+            error_occured = false;
+        }
+
         let sql = Text::new("").prompt()?;
         if sql.is_empty() {
             continue;
         }
-
         let (sql, desc) = if sql.to_lowercase().starts_with("desc ") {
             let table_or_view = sql.split_once(' ').unwrap().1;
             (format!("select * from {table_or_view} where 1 = 2"), true)
@@ -56,6 +70,7 @@ fn main() -> anyhow::Result<()> {
             Ok(stmt) => stmt,
             Err(err) => {
                 println!("{err}");
+                error_occured = true;
                 continue;
             }
         };
@@ -63,6 +78,7 @@ fn main() -> anyhow::Result<()> {
             Ok(executed) => executed,
             Err(err) => {
                 println!("{err}");
+                error_occured = true;
                 continue;
             }
         };
@@ -70,6 +86,7 @@ fn main() -> anyhow::Result<()> {
             Ok(resolved) => resolved,
             Err(err) => {
                 println!("{err}");
+                error_occured = true;
                 continue;
             }
         };
@@ -102,4 +119,8 @@ fn main() -> anyhow::Result<()> {
             Executed::Unknown(_) => println!("Succeed"),
         }
     }
+}
+
+fn main() -> anyhow::Result<()> {
+    app()
 }
