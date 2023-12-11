@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-inquire = "0.6.2"
+rustyline = { version = "13.0.0", features = ["derive"] }
 tabled = "0.14.0"
 thiserror = "1.0.50"
 
