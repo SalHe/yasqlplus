@@ -13,6 +13,7 @@ use self::states::States;
 
 mod conn_str;
 mod helper;
+mod highlight;
 mod states;
 mod validate;
 
@@ -158,11 +159,11 @@ impl App {
         let port = port.unwrap_or(1688);
         let username = match username {
             Some(v) => v.clone(),
-            None => self.rl.readline("Username: ")?,
+            None => self.normal_input("Username: ")?,
         };
         let password = match password {
             Some(v) => v.clone(),
-            None => self.rl.readline("Password: ")?,
+            None => self.normal_input("Password: ")?,
         };
         Ok(
             match Connection::connect(&host, port, &username, &password) {
@@ -170,6 +171,13 @@ impl App {
                 Err(err) => println!("Failed to connect: {}", err),
             },
         )
+    }
+
+    fn normal_input(&mut self, prompt: &str) -> Result<String, ReadlineError> {
+        self.rl.helper_mut().unwrap().disable_validation();
+        let input = self.rl.readline(prompt);
+        self.rl.helper_mut().unwrap().enable_validation();
+        input
     }
 
     fn parse_command(input: &str) -> anyhow::Result<Option<Command>> {

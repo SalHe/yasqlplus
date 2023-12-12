@@ -2,27 +2,31 @@ use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 
 use super::{App, Command};
 
-pub struct YspValidator {}
+pub struct YspValidator {
+    pub enabled: bool,
+}
 
 impl Validator for YspValidator {
     fn validate(&self, ctx: &mut ValidationContext) -> rustyline::Result<ValidationResult> {
         let input = ctx.input();
 
         // validate sql mainly
-        if let Ok(command) = App::parse_command(input) {
-            match command {
-                Some(command) => match command {
-                    Command::SQL(sql) => return self.validate_sql(&sql),
-                    Command::Describe(table_or_view) => {
-                        if table_or_view.ends_with(';') {
-                            return Ok(ValidationResult::Valid(None));
-                        } else {
-                            return Ok(ValidationResult::Incomplete);
+        if self.enabled {
+            if let Ok(command) = App::parse_command(input) {
+                match command {
+                    Some(command) => match command {
+                        Command::SQL(sql) => return self.validate_sql(&sql),
+                        Command::Describe(table_or_view) => {
+                            if table_or_view.ends_with(';') {
+                                return Ok(ValidationResult::Valid(None));
+                            } else {
+                                return Ok(ValidationResult::Incomplete);
+                            }
                         }
-                    }
-                    _ => {}
-                },
-                None => {}
+                        _ => {}
+                    },
+                    None => {}
+                }
             }
         }
         Ok(ValidationResult::Valid(None))
@@ -45,6 +49,6 @@ impl YspValidator {
 
 impl YspValidator {
     pub fn new() -> Self {
-        YspValidator {}
+        YspValidator { enabled: true }
     }
 }
