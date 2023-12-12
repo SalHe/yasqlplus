@@ -158,8 +158,8 @@ impl App {
                     Ok(mut command) => {
                         if let Some(mut stdin) = command.stdin.take() {
                             let _ = stdin.write_all(content.as_bytes());
-                            let _ = command.wait();
                         }
+                        let _ = command.wait();
                     }
                     Err(_) => {}
                 }
