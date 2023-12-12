@@ -91,6 +91,17 @@ impl App {
                 }
                 return Ok(());
             }
+            Command::Shell(shell) => {
+                std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(shell)
+                    .stdin(Stdio::inherit())
+                    .stdout(Stdio::inherit())
+                    .stderr(Stdio::inherit())
+                    .spawn()?
+                    .wait()?;
+                return Ok(());
+            }
             _ => {}
         }
 
@@ -205,6 +216,8 @@ impl App {
     fn parse_command(input: &str) -> anyhow::Result<Option<Command>> {
         let command = if input.is_empty() {
             None
+        } else if input.starts_with('!') {
+            Some(Command::Shell(input[1..].to_owned()))
         } else if input.to_lowercase().starts_with("desc ") {
             let table_or_view = input.split_once(' ').unwrap().1;
             Some(Command::Describe(table_or_view.to_owned()))
@@ -245,9 +258,8 @@ impl App {
                 "select * from {table_or_view} where 1=2",
                 table_or_view = &table_or_view[..(max(table_or_view.len() - 1, 0))]
             ),
-            Command::Connection { .. } => {
-                unreachable!("Connecting should be processed before.")
-            }
+            Command::Connection { .. } => unreachable!("Connecting should be processed before."),
+            Command::Shell(_) => unreachable!("Shell command should be processed before."),
         };
         let result = statment.execute_sql(&sql)?;
         Ok(result)

@@ -5,6 +5,7 @@ pub struct States {
 
 pub enum Command {
     SQL(String),
+    Shell(String),
     Describe(String),
     Connection {
         host: Option<String>,
