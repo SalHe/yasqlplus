@@ -16,3 +16,8 @@ thiserror = "1.0.50"
 
 [build-dependencies]
 bindgen = "0.69.1"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"
