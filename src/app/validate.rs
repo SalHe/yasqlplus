@@ -39,7 +39,7 @@ impl Validator for YspValidator {
 
 impl YspValidator {
     fn validate_sql(&self, sql: &str) -> rustyline::Result<ValidationResult> {
-        if sql.ends_with(';') {
+        if sql.ends_with(';') || sql.ends_with(";\n") {
             Ok(ValidationResult::Valid(None))
         } else {
             Ok(ValidationResult::Incomplete)
