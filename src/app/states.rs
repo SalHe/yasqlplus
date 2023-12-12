@@ -7,9 +7,9 @@ pub enum Command {
     SQL(String),
     Describe(String),
     Connection {
-        host: String,
-        port: u16,
-        username: String,
-        password: String,
+        host: Option<String>,
+        port: Option<u16>,
+        username: Option<String>,
+        password: Option<String>,
     },
 }
