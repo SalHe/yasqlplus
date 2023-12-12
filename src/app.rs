@@ -1,3 +1,5 @@
+use std::cmp::max;
+
 use rustyline::{
     error::ReadlineError, history::FileHistory, Cmd, CompletionType, Config, EditMode, Editor,
     EventHandler, KeyEvent,
@@ -170,19 +172,25 @@ impl App {
         )
     }
 
+    fn parse_command(input: &str) -> anyhow::Result<Option<Command>> {
+        let command = if input.is_empty() {
+            None
+        } else if input.to_lowercase().starts_with("desc ") {
+            let table_or_view = input.split_once(' ').unwrap().1;
+            Some(Command::Describe(table_or_view.to_owned()))
+        } else if input.to_lowercase().starts_with("conn ") {
+            Some(parse_connection_string(input.split_once(' ').unwrap().1)?)
+        } else {
+            Some(Command::SQL(input.to_owned()))
+        };
+        Ok(command)
+    }
+
     fn get_command(&mut self) -> anyhow::Result<()> {
         let input = self.rl.readline("SQL > ")?;
         let _ = self.rl.add_history_entry(&input);
-        if input.is_empty() {
-            self.states.command = None;
-        } else if input.to_lowercase().starts_with("desc ") {
-            let table_or_view = input.split_once(' ').unwrap().1;
-            self.states.command = Some(Command::Describe(table_or_view.to_owned()));
-        } else if input.to_lowercase().starts_with("conn ") {
-            self.states.command = Some(parse_connection_string(input.split_once(' ').unwrap().1)?);
-        } else {
-            self.states.command = Some(Command::SQL(input));
-        }
+        self.states.command = App::parse_command(&input)?;
+
         Ok(())
     }
 
@@ -194,8 +202,19 @@ impl App {
         let statment = connection.create_statment()?;
 
         let sql = match command {
-            Command::SQL(sql) => sql.clone(),
-            Command::Describe(table_or_view) => format!("select * from {table_or_view} where 1=2"),
+            Command::SQL(sql) => {
+                if sql.is_empty() || !sql.ends_with([';', '/']) {
+                    sql.to_owned()
+                } else {
+                    // trim trailing ';' for statement
+                    //               '/' for block
+                    sql[..sql.len() - 1].to_owned()
+                }
+            }
+            Command::Describe(table_or_view) => format!(
+                "select * from {table_or_view} where 1=2",
+                table_or_view = &table_or_view[..(max(table_or_view.len() - 1, 0))]
+            ),
             Command::Connection { .. } => {
                 unreachable!("Connecting should be processed before.")
             }
