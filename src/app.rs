@@ -1,13 +1,13 @@
-use std::cmp::max;
+use std::{cmp::max, io::Write, process::Stdio};
 
+use helper::YspHelper;
 use rustyline::{
     error::ReadlineError, history::FileHistory, Cmd, CompletionType, Config, EditMode, Editor,
     EventHandler, KeyEvent,
 };
 use tabled::{settings::Style, Table};
+use terminal_size::{terminal_size, Height, Width};
 use yasqlplus::wrapper::{Connection, Executed, LazyExecuted};
-
-use helper::YspHelper;
 
 use self::states::States;
 
@@ -130,6 +130,7 @@ impl App {
                     (builder.build(), Some(rows.len()))
                 };
                 let table = table.with(Style::rounded());
+                self.show_long_if_necessary(&table.to_string());
                 println!("{table}");
 
                 if let Some(rows) = rows {
@@ -143,6 +144,27 @@ impl App {
             Executed::Unknown(_) => println!("Succeed"),
         };
         Ok(())
+    }
+
+    fn show_long_if_necessary(&self, content: &str) {
+        let size = terminal_size();
+        if let Some((Width(w), Height(_h))) = size {
+            if content.lines().map(|x| x.len()).any(|x| x >= w as _) {
+                match std::process::Command::new("less")
+                    .arg("-S")
+                    .stdin(Stdio::piped())
+                    .spawn()
+                {
+                    Ok(mut command) => {
+                        if let Some(mut stdin) = command.stdin.take() {
+                            let _ = stdin.write_all(content.as_bytes());
+                            let _ = command.wait();
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
     }
 
     fn connect(

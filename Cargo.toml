@@ -11,6 +11,7 @@ colorize = "0.1.0"
 rustyline = { version = "13.0.0", features = ["derive"] }
 syntect = "5.1.0"
 tabled = "0.14.0"
+terminal_size = "0.3.0"
 thiserror = "1.0.50"
 
 [build-dependencies]
