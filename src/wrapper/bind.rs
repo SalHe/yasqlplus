@@ -16,8 +16,6 @@ pub trait Binder {
     unsafe fn get_data(&self) -> Value;
 }
 
-type NumberInner = [u8; 22];
-
 #[derive(Debug)]
 pub enum Value {
     Bool(bool),
@@ -27,15 +25,15 @@ pub enum Value {
     BigInt(i64),
     Float(f32),
     Double(f64),
-    Number(NumberInner), // TODO
+    Number(String), // TODO typed
     Bit(u64),
     Char(String),
     VarChar(String),
     NChar(String),
     NVarChar(String),
-    Date,        // TODO
-    Time,        // TODO
-    Unsupported, // TODO
+    Date(String),        // TODO typed
+    Time(String),        // TODO typed
+    Unsupported(String), // TODO
 }
 
 impl Display for Value {
@@ -48,15 +46,15 @@ impl Display for Value {
             Value::BigInt(v) => v.fmt(f),
             Value::Float(v) => v.fmt(f),
             Value::Double(v) => v.fmt(f),
-            Value::Number(v) => format!("{v:?}").fmt(f),
+            Value::Number(v) => v.fmt(f),
             Value::Bit(v) => v.fmt(f),
             Value::Char(v) => v.fmt(f),
             Value::VarChar(v) => v.fmt(f),
             Value::NChar(v) => v.fmt(f),
             Value::NVarChar(v) => v.fmt(f),
-            Value::Date => "DATE?".fmt(f),
-            Value::Time => "TIME?".fmt(f),
-            Value::Unsupported => "UNSUPPORTED?".fmt(f),
+            Value::Date(v) => v.fmt(f),
+            Value::Time(v) => v.fmt(f),
+            Value::Unsupported(v) => v.fmt(f),
         }
     }
 }
@@ -96,7 +94,6 @@ sized_value! { Integer: i32         => Type::Integer}
 sized_value! { BigInt: i64          => Type::BigInt}
 sized_value! { Float: f32           => Type::Float}
 sized_value! { Double: f64          => Type::Double}
-sized_value! { Number: NumberInner  => Type::Number}
 sized_value! { Bit: u64             => Type::Bit}
 
 macro_rules! string_value {
@@ -126,7 +123,7 @@ macro_rules! string_value {
             }
 
             unsafe fn get_data(&self) -> Value {
-                Value::Char(
+                Value::$type(
                     CStr::from_bytes_until_nul(&self.0)
                         .unwrap()
                         .to_str()
@@ -138,17 +135,11 @@ macro_rules! string_value {
     };
 }
 
-string_value! {Char     @ 4096 => Type::Char}
-string_value! {NChar    @ 4096 => Type::NChar}
-string_value! {VarChar  @ 4096 => Type::VarChar}
-string_value! {NVarChar @ 4096 => Type::NVarChar}
-
-pub struct Unsupported;
-
-impl Binder for Unsupported {
-    unsafe fn bind_column(&mut self, _result_set: &ResultSet, _column: usize) {}
-
-    unsafe fn get_data(&self) -> Value {
-        Value::Unsupported
-    }
-}
+string_value! {Char            @ 4096 => Type::Char}
+string_value! {NChar           @ 4096 => Type::NChar}
+string_value! {VarChar         @ 4096 => Type::VarChar}
+string_value! {NVarChar        @ 4096 => Type::NVarChar}
+string_value! {Date            @ 4096 => Type::VarChar}
+string_value! {Number          @ 4096 => Type::VarChar}
+string_value! {Time            @ 4096 => Type::VarChar}
+string_value! {Unsupported     @ 4096 => Type::VarChar}

@@ -35,7 +35,7 @@ impl RowsIterator {
                     Type::NChar => Box::<NChar>::default(),
                     Type::VarChar => Box::<VarChar>::default(),
                     Type::NVarChar => Box::<NVarChar>::default(),
-                    _ => Box::<Unsupported>::new(Unsupported),
+                    _ => Box::<Unsupported>::default(),
                 }
             })
             .collect::<Vec<_>>();
