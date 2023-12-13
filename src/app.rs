@@ -148,10 +148,7 @@ impl App {
                 }
 
                 if let Some(rows) = rows {
-                    println!(
-                        "{rows} row{suffix} fetched",
-                        suffix = if rows > 0 { "s" } else { "" }
-                    );
+                    println!("{rows} row(s) fetched");
                 }
             }
             Executed::DML(affection) => {
@@ -169,7 +166,9 @@ impl App {
         }
         let size = terminal_size();
         if let Some((Width(w), Height(_h))) = size {
-            if console::measure_text_width(content) >= w as _ {
+            if console::measure_text_width(content.lines().into_iter().nth(0).unwrap_or_default())
+                >= w as _
+            {
                 match std::process::Command::new("less")
                     .arg("-S")
                     .stdin(Stdio::piped())
@@ -210,7 +209,10 @@ impl App {
         Ok(
             match Connection::connect(&host, port, &username, &password) {
                 Ok(conn) => self.connection = Some(conn),
-                Err(err) => println!("Failed to connect: {}", err),
+                Err(err) => {
+                    self.connection = None;
+                    println!("Failed to connect: {}", err);
+                }
             },
         )
     }
