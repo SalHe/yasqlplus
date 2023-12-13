@@ -4,7 +4,7 @@
 
 YaSQL+ is an alternative for yasql. 
 
-Yasql is an offical CLI client for [YashanDB](https://www.yashandb.com/) designed and developed by [SICS(Shenzhen Institute of Computing Sciences)](https://www.sics.ac.cn/)
+Yasql is an offical CLI client for [YashanDB](https://www.yashandb.com/) designed and developed by [SICS(Shenzhen Institute of Computing Sciences)](https://www.sics.ac.cn/).
 
 YaSQL+ has some features for better experience, but not shipped with latest YashanDB feature compared with yasql.
 
@@ -19,6 +19,8 @@ YaSQL+ has some features for better experience, but not shipped with latest Yash
 - [ ] Smart multiline input
 - [ ] Smart completion for Keywords/Table/View/Column
 - [ ] Alias command
+
+![yasqlplus](./docs/images/yasqlplus.gif)
 
 ## Limitations
 
