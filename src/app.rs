@@ -140,12 +140,18 @@ impl App {
                     builder.insert_record(0, columns.iter().map(|x| x.name.clone()));
                     (builder.build(), Some(rows.len()))
                 };
-                let table = table.with(Style::rounded());
-                self.show_long_if_necessary(&table.to_string());
-                println!("{table}");
+
+                if matches!(rows, None) || matches!(rows, Some(row) if row > 0) {
+                    let table = table.with(Style::rounded());
+                    self.show_long_if_necessary(&table.to_string());
+                    println!("{table}");
+                }
 
                 if let Some(rows) = rows {
-                    println!("{} row(s) fetched", rows);
+                    println!(
+                        "{rows} row{suffix} fetched",
+                        suffix = if rows > 0 { "s" } else { "" }
+                    );
                 }
             }
             Executed::DML(affection) => {
