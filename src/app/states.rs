@@ -3,6 +3,7 @@ pub struct States {
     pub command: Option<Command>,
 }
 
+#[allow(clippy::upper_case_acronyms)]
 pub enum Command {
     SQL(String),
     Shell(String),

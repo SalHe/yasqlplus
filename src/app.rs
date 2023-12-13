@@ -80,12 +80,7 @@ impl App {
                 username,
                 password,
             } => {
-                match self.connect(
-                    host.clone(),
-                    port.clone(),
-                    username.clone(),
-                    password.clone(),
-                ) {
+                match self.connect(host.clone(), *port, username.clone(), password.clone()) {
                     Ok(_) => println!("Connected!"),
                     Err(err) => println!("Failed to connect: {err}"),
                 }
@@ -107,7 +102,7 @@ impl App {
 
         match &self.connection {
             Some(connection) => {
-                let result = self.execute_command(&connection, command);
+                let result = self.execute_command(connection, command);
                 match result {
                     Ok(result) => match self.show_result(result, command) {
                         Ok(_) => {}
@@ -141,7 +136,7 @@ impl App {
                     (builder.build(), Some(rows.len()))
                 };
 
-                if matches!(rows, None) || matches!(rows, Some(row) if row > 0) {
+                if rows.is_none() || matches!(rows, Some(row) if row > 0) {
                     let table = table.with(Style::rounded());
                     self.show_long_if_necessary(&table.to_string());
                     println!("{table}");
@@ -166,21 +161,16 @@ impl App {
         }
         let size = terminal_size();
         if let Some((Width(w), Height(_h))) = size {
-            if console::measure_text_width(content.lines().into_iter().nth(0).unwrap_or_default())
-                >= w as _
-            {
-                match std::process::Command::new("less")
+            if console::measure_text_width(content.lines().nth(0).unwrap_or_default()) >= w as _ {
+                if let Ok(mut command) = std::process::Command::new("less")
                     .arg("-S")
                     .stdin(Stdio::piped())
                     .spawn()
                 {
-                    Ok(mut command) => {
-                        if let Some(mut stdin) = command.stdin.take() {
-                            let _ = stdin.write_all(content.as_bytes());
-                        }
-                        let _ = command.wait();
+                    if let Some(mut stdin) = command.stdin.take() {
+                        let _ = stdin.write_all(content.as_bytes());
                     }
-                    Err(_) => {}
+                    let _ = command.wait();
                 }
             }
         }
@@ -206,15 +196,14 @@ impl App {
             Some(v) => v.clone(),
             None => self.normal_input("Password: ")?,
         };
-        Ok(
-            match Connection::connect(&host, port, &username, &password) {
-                Ok(conn) => self.connection = Some(conn),
-                Err(err) => {
-                    self.connection = None;
-                    println!("Failed to connect: {}", err);
-                }
-            },
-        )
+        match Connection::connect(&host, port, &username, &password) {
+            Ok(conn) => self.connection = Some(conn),
+            Err(err) => {
+                self.connection = None;
+                println!("Failed to connect: {}", err);
+            }
+        };
+        Ok(())
     }
 
     fn normal_input(&mut self, prompt: &str) -> Result<String, ReadlineError> {
@@ -227,13 +216,12 @@ impl App {
     fn parse_command(input: &str) -> anyhow::Result<Option<Command>> {
         let command = if input.is_empty() {
             None
-        } else if input.starts_with('!') {
-            Some(Command::Shell(input[1..].to_owned()))
-        } else if input.to_lowercase().starts_with("desc ") {
-            let table_or_view = input.split_once(' ').unwrap().1;
+        } else if let Some(stripped) = input.strip_prefix('!') {
+            Some(Command::Shell(stripped.to_owned()))
+        } else if let Some(table_or_view) = input.strip_prefix("desc ") {
             Some(Command::Describe(table_or_view.to_owned()))
-        } else if input.to_lowercase().starts_with("conn ") {
-            Some(parse_connection_string(input.split_once(' ').unwrap().1)?)
+        } else if let Some(conn) = input.strip_prefix("conn ") {
+            Some(parse_connection_string(conn)?)
         } else {
             Some(Command::SQL(input.to_owned()))
         };

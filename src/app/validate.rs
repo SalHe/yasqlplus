@@ -12,20 +12,17 @@ impl Validator for YspValidator {
 
         // validate sql mainly
         if self.enabled {
-            if let Ok(command) = App::parse_command(input) {
+            if let Ok(Some(command)) = App::parse_command(input) {
                 match command {
-                    Some(command) => match command {
-                        Command::SQL(sql) => return self.validate_sql(&sql),
-                        Command::Describe(table_or_view) => {
-                            if table_or_view.ends_with(';') {
-                                return Ok(ValidationResult::Valid(None));
-                            } else {
-                                return Ok(ValidationResult::Incomplete);
-                            }
+                    Command::SQL(sql) => return self.validate_sql(&sql),
+                    Command::Describe(table_or_view) => {
+                        if table_or_view.ends_with(';') {
+                            return Ok(ValidationResult::Valid(None));
+                        } else {
+                            return Ok(ValidationResult::Incomplete);
                         }
-                        _ => {}
-                    },
-                    None => {}
+                    }
+                    _ => {}
                 }
             }
         }
