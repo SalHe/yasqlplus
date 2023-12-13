@@ -158,9 +158,12 @@ impl App {
     }
 
     fn show_long_if_necessary(&self, content: &str) {
+        if !console::Term::stdout().is_term() {
+            return;
+        }
         let size = terminal_size();
         if let Some((Width(w), Height(_h))) = size {
-            if content.lines().map(|x| x.len()).any(|x| x >= w as _) {
+            if console::measure_text_width(content) >= w as _ {
                 match std::process::Command::new("less")
                     .arg("-S")
                     .stdin(Stdio::piped())
