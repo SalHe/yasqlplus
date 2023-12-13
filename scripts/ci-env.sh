@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+
+source ~/yashandb/yasdb_home/conf/yasdb.bashrc
+echo "YASDB_HOME=$YASDB_HOME" >>$GITHUB_ENV
+echo "YASDB_DATA=$YASDB_DATA" >>$GITHUB_ENV
+echo "PATH=$PATH:\$PATH" >>$GITHUB_ENV
+echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH:\$LD_LIBRARY_PATH" >>$GITHUB_ENV
+
+echo "YASHANDB_HOST=127.0.0.1" >>$GITHUB_ENV
+echo "YASHANDB_PORT=1688" >>$GITHUB_ENV
+echo "YASHANDB_USERNAME=sys" >>$GITHUB_ENV
+echo "YASHANDB_PASSWORD=yasdb_123" >>$GITHUB_ENV
