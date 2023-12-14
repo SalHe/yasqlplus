@@ -28,6 +28,7 @@ const HISTORY_FILE: &str = "yasqlplus-history.txt";
 
 pub struct App {
     connection: Option<Connection>,
+    prompt_conn: String,
     rl: Editor<YspHelper, FileHistory>,
     states: States,
 }
@@ -47,6 +48,7 @@ impl App {
             rl,
             connection: None,
             states: States::default(),
+            prompt_conn: Default::default(),
         })
     }
 
@@ -196,6 +198,13 @@ impl App {
         }
     }
 
+    fn get_prompt(&self) -> String {
+        match self.connection {
+            Some(_) => self.prompt_conn.clone().green(),
+            None => "SQL > ".to_owned().red(),
+        }
+    }
+
     fn connect(
         &mut self,
         host: Option<String>,
@@ -217,7 +226,10 @@ impl App {
             None => self.normal_input("Password: ")?,
         };
         match Connection::connect(&host, port, &username, &password) {
-            Ok(conn) => self.connection = Some(conn),
+            Ok(conn) => {
+                self.prompt_conn = format!("{username}@{host}:{port} > ");
+                self.connection = Some(conn)
+            }
             Err(err) => {
                 self.connection = None;
                 println!("Failed to connect: {}", err);
@@ -249,7 +261,7 @@ impl App {
     }
 
     fn get_command(&mut self) -> anyhow::Result<()> {
-        let input = self.rl.readline("SQL > ")?;
+        let input = self.rl.readline(&self.get_prompt())?;
         let _ = self.rl.add_history_entry(&input);
         self.states.command = App::parse_command(&input)?;
 
