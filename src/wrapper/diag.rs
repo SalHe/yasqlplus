@@ -1,6 +1,12 @@
 use std::{ffi::CStr, fmt::Display, ptr::null_mut};
 
 use colored::Colorize;
+use syntect::{
+    easy::HighlightLines,
+    highlighting::{Style, ThemeSet},
+    parsing::SyntaxSet,
+    util::as_24_bit_terminal_escaped,
+};
 
 use crate::native::{yacGetDiagRec, EnYacResult_YAC_ERROR, YacTextPos};
 
@@ -31,14 +37,39 @@ impl Display for DiagInfo {
             }
             (line, column) => match &self.sql {
                 Some(sql) => {
-                    let mut lines = sql.lines().collect::<Vec<_>>();
-                    if lines.is_empty() {
-                        lines.push("");
+                    if sql.is_empty() {
+                        return write!(f, "{}", self.message.red());
                     }
-                    let indent = " ".repeat((column - 1) as _);
-                    let message = &self.message;
-                    let indicator = format!("{indent}^ {message}");
-                    lines.insert(line as _, &indicator);
+                    let mut lines = vec![];
+
+                    let heading = format!("  {line} | ");
+                    lines.push(format!(
+                        "{heading}{code}",
+                        heading = heading.blue(),
+                        code = {
+                            let ps = SyntaxSet::load_defaults_newlines();
+                            let ts = ThemeSet::load_defaults();
+
+                            let syntax = ps.find_syntax_by_extension("sql").unwrap();
+                            let mut h =
+                                HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+                            let ranges: Vec<(Style, &str)> = h
+                                .highlight_line(sql.lines().nth(line as usize - 1).unwrap(), &ps)
+                                .unwrap();
+                            let mut escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+                            escaped.push_str("\x1b[0m");
+                            escaped
+                        }
+                    ));
+                    lines.push(
+                        format!(
+                            "{indent}^ {message}",
+                            indent = " ".repeat(heading.len() + column as usize - 1),
+                            message = self.message
+                        )
+                        .red()
+                        .to_string(),
+                    );
                     write!(f, "{}", lines.join("\n"))
                 }
                 None => write!(f, "{:?}", self),
