@@ -1,4 +1,4 @@
-use std::{cmp::max, io::Write, process::Stdio};
+use std::{cell::RefCell, cmp::max, io::Write, process::Stdio, rc::Rc};
 
 use colored::Colorize;
 use helper::YspHelper;
@@ -7,7 +7,7 @@ use rustyline::{
     EventHandler, KeyEvent,
 };
 use tabled::{
-    settings::{object::Cell, Format, Modify, Style},
+    settings::{object::Cell as TableCell, Format, Modify, Style},
     Table,
 };
 use terminal_size::{terminal_size, Height, Width};
@@ -15,6 +15,7 @@ use yasqlplus::wrapper::{Connection, Executed, LazyExecuted};
 
 use self::states::States;
 
+mod completer;
 mod conn_str;
 mod helper;
 mod highlight;
@@ -27,7 +28,7 @@ pub use states::Command;
 const HISTORY_FILE: &str = "yasqlplus-history.txt";
 
 pub struct App {
-    connection: Option<Connection>,
+    connection: Rc<RefCell<Option<Connection>>>,
     prompt_conn: String,
     rl: Editor<YspHelper, FileHistory>,
     states: States,
@@ -38,16 +39,17 @@ impl App {
     pub fn new() -> anyhow::Result<Self> {
         let config = Config::builder()
             .history_ignore_space(true)
-            .completion_type(CompletionType::List)
+            .completion_type(CompletionType::Circular)
             .edit_mode(EditMode::Vi)
             .build();
         let mut rl = Editor::with_config(config)?;
-        rl.set_helper(Some(YspHelper::new()));
+        let connection = Rc::new(RefCell::new(None));
+        rl.set_helper(Some(YspHelper::new(connection.clone())));
         rl.bind_sequence(KeyEvent::alt('s'), EventHandler::Simple(Cmd::Newline));
         let _ = rl.load_history(HISTORY_FILE);
         Ok(App {
             rl,
-            connection: None,
+            connection,
             states: States::default(),
             prompt_conn: Default::default(),
             exit: false,
@@ -117,7 +119,7 @@ impl App {
             _ => {}
         }
 
-        match &self.connection {
+        match self.connection.borrow().as_ref() {
             Some(connection) => {
                 let result = self.execute_command(connection, command);
                 match result {
@@ -161,7 +163,7 @@ impl App {
                     let mut table = builder.build();
                     for (row, col) in nulls {
                         let _ = &table.with(
-                            Modify::new(Cell::new(row + 1, col))
+                            Modify::new(TableCell::new(row + 1, col))
                                 .with(Format::content(|x| x.to_owned().italic().to_string())),
                         );
                     }
@@ -210,7 +212,7 @@ impl App {
     }
 
     fn get_prompt(&self) -> String {
-        match self.connection {
+        match self.connection.borrow().as_ref() {
             Some(_) => self.prompt_conn.clone().green().to_string(),
             None => "SQL > ".to_owned(),
         }
@@ -239,10 +241,10 @@ impl App {
         match Connection::connect(&host, port, &username, &password) {
             Ok(conn) => {
                 self.prompt_conn = format!("{username}@{host}:{port} > ");
-                self.connection = Some(conn)
+                self.connection.replace(Some(conn))
             }
             Err(err) => {
-                self.connection = None;
+                self.connection.replace(None);
                 return Err(err.into());
             }
         };
