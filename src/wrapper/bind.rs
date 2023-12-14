@@ -1,4 +1,4 @@
-use std::{ffi::CStr, fmt::Display, ptr::null_mut};
+use std::{ffi::CStr, fmt::Display};
 
 use crate::native::yacBindColumn;
 
@@ -13,7 +13,7 @@ pub trait Binder {
 
     /// # Safety
     /// TODO
-    unsafe fn get_data(&self) -> Value;
+    unsafe fn get_data(&self) -> Option<Value>;
 }
 
 #[derive(Debug)]
@@ -62,8 +62,7 @@ impl Display for Value {
 macro_rules! sized_value {
     ($type:ident: $ty:ty => $sql_ty:expr) => {
         #[derive(Default)]
-        #[repr(transparent)]
-        pub struct $type($ty);
+        pub struct $type($ty, i32);
 
         impl Binder for $type {
             // const TYPE: Type = $sql_ty;
@@ -75,13 +74,17 @@ macro_rules! sized_value {
                         std::mem::transmute($sql_ty),
                         &self.0 as *const _ as *mut _,
                         std::mem::size_of_val(&self.0) as _,
-                        null_mut(),
+                        &self.1 as *const _ as *mut _,
                     )
                 };
             }
 
-            unsafe fn get_data(&self) -> Value {
-                Value::$type(self.0.clone())
+            unsafe fn get_data(&self) -> Option<Value> {
+                if self.1 == -1 {
+                    None
+                } else {
+                    Some(Value::$type(self.0.clone()))
+                }
             }
         }
     };
@@ -98,12 +101,11 @@ sized_value! { Bit: u64             => Type::Bit}
 
 macro_rules! string_value {
     ($type:ident @ $buffer_len:expr => $sql_ty:expr) => {
-        #[repr(transparent)]
-        pub struct $type([u8; $buffer_len]);
+        pub struct $type([u8; $buffer_len], i32);
 
         impl Default for $type {
             fn default() -> Self {
-                Self([0; $buffer_len])
+                Self([0; $buffer_len], 0)
             }
         }
 
@@ -117,19 +119,23 @@ macro_rules! string_value {
                         std::mem::transmute($sql_ty),
                         &self.0 as *const _ as *mut _,
                         self.0.len() as _,
-                        null_mut(),
+                        &self.1 as *const _ as *mut _,
                     )
                 };
             }
 
-            unsafe fn get_data(&self) -> Value {
-                Value::$type(
-                    CStr::from_bytes_until_nul(&self.0)
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .to_string(),
-                )
+            unsafe fn get_data(&self) -> Option<Value> {
+                if self.1 == -1 {
+                    None
+                } else {
+                    Some(Value::$type(
+                        CStr::from_bytes_until_nul(&self.0)
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    ))
+                }
             }
         }
     };

@@ -1,11 +1,15 @@
 use std::{cmp::max, io::Write, process::Stdio};
 
+use colorize::AnsiColor;
 use helper::YspHelper;
 use rustyline::{
     error::ReadlineError, history::FileHistory, Cmd, CompletionType, Config, EditMode, Editor,
     EventHandler, KeyEvent,
 };
-use tabled::{settings::Style, Table};
+use tabled::{
+    settings::{object::Cell, Format, Modify, Style},
+    Table,
+};
 use terminal_size::{terminal_size, Height, Width};
 use yasqlplus::wrapper::{Connection, Executed, LazyExecuted};
 
@@ -128,12 +132,28 @@ impl App {
                     (Table::new(columns), None)
                 } else {
                     let mut builder = tabled::builder::Builder::default();
+                    let mut nulls = Vec::<(usize, usize)>::new();
                     let rows = result.rows().collect::<Vec<_>>();
-                    rows.iter().for_each(|row| {
-                        builder.push_record(row.iter().map(|x| format!("{x}")));
+                    rows.iter().enumerate().for_each(|(y, row)| {
+                        builder.push_record(row.iter().enumerate().map(|(x, value)| match value {
+                            Some(x) => format!("{x}"),
+                            None => {
+                                nulls.push((y, x));
+                                "<null>".to_owned()
+                            }
+                        }));
                     });
                     builder.insert_record(0, columns.iter().map(|x| x.name.clone()));
-                    (builder.build(), Some(rows.len()))
+
+                    let mut table = builder.build();
+                    for (row, col) in nulls {
+                        let _ = &table.with(
+                            Modify::new(Cell::new(row + 1, col))
+                                .with(Format::content(|x| x.to_owned().italic())),
+                        );
+                    }
+
+                    (table, Some(rows.len()))
                 };
 
                 if rows.is_none() || matches!(rows, Some(row) if row > 0) {

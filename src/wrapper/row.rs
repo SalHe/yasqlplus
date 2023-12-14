@@ -59,7 +59,7 @@ impl RowsIterator {
 }
 
 impl Iterator for RowsIterator {
-    type Item = Vec<Value>;
+    type Item = Vec<Option<Value>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut rows = self.fetched;
