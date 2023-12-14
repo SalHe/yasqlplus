@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-colorize = "0.1.0"
+colored = "2.1.0"
 console = "0.15.7"
 rustyline = { version = "13.0.0", features = ["derive"] }
 syntect = "5.1.0"

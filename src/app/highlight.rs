@@ -1,4 +1,4 @@
-use colorize::AnsiColor;
+use colored::Colorize;
 use rustyline::highlight::Highlighter;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, ThemeSet};
@@ -15,7 +15,7 @@ impl YspHightligter {
 
 impl Highlighter for YspHightligter {
     fn highlight_hint<'h>(&self, hint: &'h str) -> std::borrow::Cow<'h, str> {
-        std::borrow::Cow::Owned(hint.to_owned().bold())
+        std::borrow::Cow::Owned(hint.to_owned().bold().to_string())
     }
 
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> std::borrow::Cow<'l, str> {

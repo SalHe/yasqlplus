@@ -1,6 +1,6 @@
 use std::{cmp::max, io::Write, process::Stdio};
 
-use colorize::AnsiColor;
+use colored::Colorize;
 use helper::YspHelper;
 use rustyline::{
     error::ReadlineError, history::FileHistory, Cmd, CompletionType, Config, EditMode, Editor,
@@ -151,7 +151,7 @@ impl App {
                     for (row, col) in nulls {
                         let _ = &table.with(
                             Modify::new(Cell::new(row + 1, col))
-                                .with(Format::content(|x| x.to_owned().italic())),
+                                .with(Format::content(|x| x.to_owned().italic().to_string())),
                         );
                     }
 
@@ -200,8 +200,8 @@ impl App {
 
     fn get_prompt(&self) -> String {
         match self.connection {
-            Some(_) => self.prompt_conn.clone().green(),
-            None => "SQL > ".to_owned().red(),
+            Some(_) => self.prompt_conn.clone().green().to_string(),
+            None => "SQL > ".to_owned().red().to_string(),
         }
     }
 
