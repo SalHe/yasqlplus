@@ -27,7 +27,7 @@ impl Highlighter for YspHightligter {
 
     fn highlight<'l>(&self, line: &'l str, _pos: usize) -> std::borrow::Cow<'l, str> {
         let syntax = self.syntax_set.find_syntax_by_extension("sql").unwrap();
-        let mut h = HighlightLines::new(&syntax, &self.theme);
+        let mut h = HighlightLines::new(syntax, &self.theme);
         let ranges: Vec<(Style, &str)> = h.highlight_line(line, &self.syntax_set).unwrap();
         let mut escaped = as_24_bit_terminal_escaped(&ranges[..], true);
         escaped.push_str("\x1b[0m");
