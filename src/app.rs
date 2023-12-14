@@ -31,6 +31,7 @@ pub struct App {
     prompt_conn: String,
     rl: Editor<YspHelper, FileHistory>,
     states: States,
+    exit: bool,
 }
 
 impl App {
@@ -49,13 +50,15 @@ impl App {
             connection: None,
             states: States::default(),
             prompt_conn: Default::default(),
+            exit: false,
         })
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
-        loop {
+        while !self.exit {
             self.step(None)?;
         }
+        Ok(())
     }
 
     pub fn step(&mut self, command: Option<Command>) -> anyhow::Result<()> {
@@ -64,7 +67,15 @@ impl App {
             None => {
                 if let Err(err) = self.get_command() {
                     match err.downcast::<ReadlineError>() {
-                        Ok(rl_err) => return Err(rl_err.into()),
+                        Ok(rl_err) => match rl_err {
+                            ReadlineError::Eof => {
+                                // EOF/Ctrl+D ==> exit
+                                self.exit = true;
+                                return Ok(());
+                            }
+                            ReadlineError::Interrupted => return Ok(()), // Ctrl + C ==> next command
+                            _ => return Err(rl_err.into()),
+                        },
                         Err(err) => {
                             println!("Error command: {err}");
                             return Ok(());
@@ -88,7 +99,7 @@ impl App {
             } => {
                 match self.connect(host.clone(), *port, username.clone(), password.clone()) {
                     Ok(_) => println!("Connected!"),
-                    Err(err) => println!("Failed to connect: {err}"),
+                    Err(err) => println!("Failed to connect: \n{err}"),
                 }
                 return Ok(());
             }
@@ -201,7 +212,7 @@ impl App {
     fn get_prompt(&self) -> String {
         match self.connection {
             Some(_) => self.prompt_conn.clone().green().to_string(),
-            None => "SQL > ".to_owned().red().to_string(),
+            None => "SQL > ".to_owned(),
         }
     }
 
@@ -232,7 +243,7 @@ impl App {
             }
             Err(err) => {
                 self.connection = None;
-                println!("Failed to connect: {}", err);
+                return Err(err.into());
             }
         };
         Ok(())

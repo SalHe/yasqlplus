@@ -1,5 +1,7 @@
 use std::{ffi::CStr, fmt::Display, ptr::null_mut};
 
+use colored::Colorize;
+
 use crate::native::{yacGetDiagRec, EnYacResult_YAC_ERROR, YacTextPos};
 
 #[derive(Debug)]
@@ -14,7 +16,19 @@ pub struct DiagInfo {
 impl Display for DiagInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.pos {
-            (0, 0) => write!(f, "{:?}", self),
+            (0, 0) => {
+                let DiagInfo {
+                    message,
+                    sql_state,
+                    code,
+                    ..
+                } = self;
+                write!(
+                    f,
+                    "{}",
+                    format!("YAS-{code:0>5}: {message} (SQL State: {sql_state})").red()
+                )
+            }
             (line, column) => match &self.sql {
                 Some(sql) => {
                     let mut lines = sql.lines().collect::<Vec<_>>();
