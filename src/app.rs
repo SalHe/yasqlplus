@@ -143,8 +143,9 @@ impl App {
         match resolved {
             Executed::DQL(result) => {
                 let columns = result.iter_columns().collect::<Vec<_>>();
-                let (mut table, rows) = if matches!(command, Command::Describe(_)) {
-                    (Table::new(columns), None)
+                let (mut table, styling, rows) = if matches!(command, Command::Describe(_)) {
+                    let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|_: &mut Table| {});
+                    (Table::new(columns), styling, None)
                 } else {
                     let mut builder = tabled::builder::Builder::default();
                     let mut nulls = Vec::<(usize, usize)>::new();
@@ -160,20 +161,21 @@ impl App {
                     });
                     builder.insert_record(0, columns.iter().map(|x| x.name.clone()));
 
-                    let mut table = builder.build();
-                    for (row, col) in nulls {
-                        let _ = &table.with(
-                            Modify::new(TableCell::new(row + 1, col))
-                                .with(Format::content(|x| x.to_owned().italic().to_string())),
-                        );
-                    }
-
-                    (table, Some(rows.len()))
+                    let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|table: &mut Table| {
+                        for (row, col) in nulls {
+                            let _ = &table.with(
+                                Modify::new(TableCell::new(row + 1, col))
+                                    .with(Format::content(|x| x.to_owned().italic().to_string())),
+                            );
+                        }
+                    });
+                    (builder.build(), styling, Some(rows.len()))
                 };
 
                 if rows.is_none() || matches!(rows, Some(row) if row > 0) {
                     let table = table.with(Style::rounded());
                     self.show_long_if_necessary(&table.to_string());
+                    styling(table);
                     println!("{table}");
                 }
 
