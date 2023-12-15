@@ -36,8 +36,15 @@ impl Validator for YspValidator {
 
 impl YspValidator {
     fn validate_sql(&self, sql: &str) -> rustyline::Result<ValidationResult> {
-        if sql.lines().count() <= 1 && (sql.ends_with(';') || sql.ends_with(";\n"))
-            || sql.ends_with('/')
+        let (single_line, last_line_is_comment, last_line) = sql
+            .lines()
+            .enumerate()
+            .last()
+            .map_or((true, false, ""), |(y, last_line)| {
+                (y == 0, last_line.starts_with("--"), last_line)
+            });
+        if (single_line && (last_line_is_comment || sql.ends_with(';')))
+            || (!single_line && last_line == "/")
         {
             Ok(ValidationResult::Valid(None))
         } else {

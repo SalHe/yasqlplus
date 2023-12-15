@@ -125,10 +125,11 @@ impl App {
             Some(connection) => {
                 let result = self.execute_command(connection, command);
                 match result {
-                    Ok(result) => match self.show_result(result, command) {
+                    Ok(Some(result)) => match self.show_result(result, command) {
                         Ok(_) => {}
                         Err(err) => println!("{err}"),
                     },
+                    Ok(None) => {} // comment
                     Err(err) => println!("{err}"),
                 }
             }
@@ -288,11 +289,14 @@ impl App {
         &self,
         connection: &Connection,
         command: &Command,
-    ) -> anyhow::Result<LazyExecuted> {
+    ) -> anyhow::Result<Option<LazyExecuted>> {
         let statement = connection.create_statement()?;
 
         let sql = match command {
             Command::SQL(sql) => {
+                if sql.lines().count() == 1 && sql.starts_with("--") {
+                    return Ok(None);
+                }
                 if sql.is_empty() || !sql.ends_with([';', '/']) {
                     sql.to_owned()
                 } else {
@@ -309,7 +313,7 @@ impl App {
             Command::Shell(_) => unreachable!("Shell command should be processed before."),
         };
         let result = statement.execute_sql(&sql)?;
-        Ok(result)
+        Ok(Some(result))
     }
 }
 
