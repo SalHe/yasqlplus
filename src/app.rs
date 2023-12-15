@@ -41,6 +41,8 @@ impl App {
             .history_ignore_space(true)
             .completion_type(CompletionType::Circular)
             .edit_mode(EditMode::Vi)
+            .auto_add_history(true)
+            .history_ignore_dups(true)?
             .build();
         let mut rl = Editor::with_config(config)?;
         let connection = Rc::new(RefCell::new(None));
@@ -277,7 +279,6 @@ impl App {
 
     fn get_command(&mut self) -> anyhow::Result<()> {
         let input = self.rl.readline(&self.get_prompt())?;
-        let _ = self.rl.add_history_entry(&input);
         self.states.command = App::parse_command(&input)?;
 
         Ok(())
