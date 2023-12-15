@@ -35,7 +35,7 @@ impl Connection {
         })
     }
 
-    pub fn create_statment(&self) -> anyhow::Result<Statement> {
+    pub fn create_statement(&self) -> anyhow::Result<Statement> {
         let stmt = StatementHandle::new(&self.conn_handle)?;
         Ok(stmt.into())
     }
@@ -56,15 +56,17 @@ mod test {
     #[test]
     fn connect_properly() {
         let host = env::var("YASHANDB_HOST")
-            .expect("please specify yashandb host via environment varible `YASHANDB_HOST`");
+            .expect("please specify yashandb host via environment variable `YASHANDB_HOST`");
         let port: u16 = env::var("YASHANDB_PORT")
-            .expect("please specify yashandb port via environment varible `YASHANDB_PORT`")
+            .expect("please specify yashandb port via environment variable `YASHANDB_PORT`")
             .parse()
             .unwrap();
-        let username = env::var("YASHANDB_USERNAME")
-            .expect("please specify yashandb username via environment varible `YASHANDB_USERNAME`");
-        let password = env::var("YASHANDB_PASSWORD")
-            .expect("please specify yashandb password via environment varible `YASHANDB_PASSWORD`");
+        let username = env::var("YASHANDB_USERNAME").expect(
+            "please specify yashandb username via environment variable `YASHANDB_USERNAME`",
+        );
+        let password = env::var("YASHANDB_PASSWORD").expect(
+            "please specify yashandb password via environment variable `YASHANDB_PASSWORD`",
+        );
         assert!(Connection::connect(&host, port, &username, &password).is_ok());
     }
 
@@ -86,7 +88,7 @@ mod test {
     }
 
     fail_test!(fail_to_connect_socket: "127.0.0.1", 9999, "hello", "world" => "failed to connect socket");
-    fail_test!(wrong_authentication: 
+    fail_test!(wrong_authentication:
         &get_connect_info().host.unwrap(),
         get_connect_info().port.unwrap(),
         "invalid username", "invalid password"

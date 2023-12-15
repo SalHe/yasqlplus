@@ -111,7 +111,7 @@ impl YspCompleter {
 
     fn get_tables_or_views(&self, sql: &str) -> Vec<String> {
         if let Some(connection) = self.connection.borrow().as_ref() {
-            if let Ok(stmt) = connection.create_statment() {
+            if let Ok(stmt) = connection.create_statement() {
                 if let Ok(result) = stmt.execute_sql(sql) {
                     return result
                         .result_set()
@@ -129,7 +129,7 @@ impl YspCompleter {
 
     fn get_columns(&self, table_or_view: &str, prefix: &str) -> Vec<YspCandidate> {
         if let Some(connection) = self.connection.borrow().as_ref() {
-            if let Ok(stmt) = connection.create_statment() {
+            if let Ok(stmt) = connection.create_statement() {
                 if let Ok(result) =
                     stmt.execute_sql(&format!("select * from {table_or_view} where 1 = 2"))
                 {

@@ -184,7 +184,7 @@ impl App {
             Executed::DML(affection) => {
                 println!("{} row(s) affected", affection.affected())
             }
-            Executed::DCL(_instrction) => println!("DCL exectued"),
+            Executed::DCL(_instruction) => println!("DCL executed"),
             Executed::Unknown(_) => println!("Succeed"),
         };
         Ok(())
@@ -286,7 +286,7 @@ impl App {
         connection: &Connection,
         command: &Command,
     ) -> anyhow::Result<LazyExecuted> {
-        let statment = connection.create_statment()?;
+        let statement = connection.create_statement()?;
 
         let sql = match command {
             Command::SQL(sql) => {
@@ -305,7 +305,7 @@ impl App {
             Command::Connection { .. } => unreachable!("Connecting should be processed before."),
             Command::Shell(_) => unreachable!("Shell command should be processed before."),
         };
-        let result = statment.execute_sql(&sql)?;
+        let result = statement.execute_sql(&sql)?;
         Ok(result)
     }
 }

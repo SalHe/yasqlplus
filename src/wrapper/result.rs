@@ -62,9 +62,9 @@ pub struct ResultSet(pub(crate) StatementHandle);
 
 impl ResultSet {
     pub fn columns(&self) -> usize {
-        let columms = 0;
-        unsafe { yacNumResultCols(self.0 .0, &columms as *const _ as *mut _) };
-        columms
+        let columns = 0;
+        unsafe { yacNumResultCols(self.0 .0, &columns as *const _ as *mut _) };
+        columns
     }
 
     pub fn iter_columns(&self) -> ColumnsIterator<'_> {

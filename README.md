@@ -2,9 +2,9 @@
 
 [![build](https://github.com/SalHe/yasqlplus/actions/workflows/build.yml/badge.svg)](https://github.com/SalHe/yasqlplus/actions/workflows/build.yml)
 
-YaSQL+ is an alternative for yasql. 
+YaSQL+ is an alternative for yasql.
 
-Yasql is an offical CLI client for [YashanDB](https://www.yashandb.com/) designed and developed by [SICS(Shenzhen Institute of Computing Sciences)](https://www.sics.ac.cn/).
+Yasql is an official CLI client for [YashanDB](https://www.yashandb.com/) designed and developed by [SICS(Shenzhen Institute of Computing Sciences)](https://www.sics.ac.cn/).
 
 YaSQL+ has some features for better experience, but not shipped with latest YashanDB feature compared with yasql.
 
@@ -24,7 +24,7 @@ YaSQL+ has some features for better experience, but not shipped with latest Yash
 
 ## Limitations
 
-Some features are not supported now (No related public API found), such as: 
+Some features are not supported now (No related public API found), such as:
 
 - Logon response server version (Output `YashanDB Server Personal Edition Release 23.1.1.100 x86_64 - X86 64bit Linux` when connected)
 - Server output response (`set serverout off`)
