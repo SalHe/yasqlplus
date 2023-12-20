@@ -6,12 +6,16 @@ use rustyline::{
     error::ReadlineError, history::FileHistory, Cmd, CompletionType, Config, EditMode, Editor,
     EventHandler, KeyEvent,
 };
+use syntect::{
+    easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet,
+    util::as_24_bit_terminal_escaped,
+};
 use tabled::{
     settings::{object::Cell as TableCell, Format, Modify, Style},
     Table,
 };
 use terminal_size::{terminal_size, Height, Width};
-use yasqlplus_client::wrapper::{Connection, Error, Executed, LazyExecuted};
+use yasqlplus_client::wrapper::{Connection, DiagInfo, Error, Executed, LazyExecuted};
 
 use crate::command::{self, parse_command, Command, InternalCommand, ParseError};
 
@@ -129,7 +133,7 @@ impl App {
                         Err(err) => println!("{err}"),
                     },
                     Ok(None) => {} // comment
-                    Err(err) => println!("{err}"),
+                    Err(err) => self.print_execute_sql_error(err),
                 }
             }
             None => {
@@ -138,6 +142,68 @@ impl App {
         }
 
         Ok(())
+    }
+
+    fn print_execute_sql_error(&self, err: Error) {
+        match err {
+            Error::YasClient(err) => match err.pos {
+                (0, 0) => {
+                    let DiagInfo {
+                        message,
+                        sql_state,
+                        code,
+                        ..
+                    } = err;
+                    println!(
+                        "{}",
+                        format!("YAS-{code:0>5}: {message} (SQL State: {sql_state})").red()
+                    )
+                }
+                (line, column) => match &err.sql {
+                    Some(sql) => {
+                        if sql.is_empty() {
+                            return println!("{}", err.message.red());
+                        }
+                        let mut lines = vec![];
+
+                        let heading = format!("  {line} | ");
+                        lines.push(format!(
+                            "{heading}{code}",
+                            heading = heading.blue(),
+                            code = {
+                                let ps = SyntaxSet::load_defaults_newlines();
+                                let ts = ThemeSet::load_defaults();
+
+                                let syntax = ps.find_syntax_by_extension("sql").unwrap();
+                                let mut h =
+                                    HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+                                let ranges: Vec<(syntect::highlighting::Style, &str)> = h
+                                    .highlight_line(
+                                        sql.lines().nth(line as usize - 1).unwrap(),
+                                        &ps,
+                                    )
+                                    .unwrap();
+                                let mut escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+                                escaped.push_str("\x1b[0m");
+                                escaped
+                            }
+                        ));
+                        lines.push(
+                            format!(
+                                "{indent}^ {message}",
+                                indent = " ".repeat(heading.len() + column as usize - 1),
+                                message = err.message
+                            )
+                            .red()
+                            .to_string(),
+                        );
+                        println!("{}", lines.join("\n"))
+                    }
+                    None => println!("{:?}", err),
+                },
+            },
+            Error::Other => todo!(),
+        }
     }
 
     fn show_result(&self, result: LazyExecuted, command: &Command) -> anyhow::Result<()> {
