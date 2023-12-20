@@ -2,12 +2,14 @@ use std::env;
 use std::path::PathBuf;
 
 fn main() {
-    println!("cargo:rustc-link-search=./yas-client/lib");
+    let src_dir = env!("CARGO_MANIFEST_DIR");
+
+    println!("cargo:rustc-link-search={src_dir}/yas-client/lib");
     println!("cargo:rustc-link-lib=yascli");
     println!("cargo:rustc-link-lib=yas_infra");
-    println!("cargo:rerun-if-changed=./yas-client/include/yacli.h");
+    println!("cargo:rerun-if-changed={src_dir}/yas-client/include/yacli.h");
     let bindings = bindgen::Builder::default()
-        .header("./yas-client/include/yacli.h")
+        .header(format!("{src_dir}/yas-client/include/yacli.h"))
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");

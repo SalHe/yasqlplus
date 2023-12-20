@@ -15,11 +15,12 @@ syntect = "5.1.0"
 tabled = { version = "0.14.0", features = ["color"] }
 terminal_size = "0.3.0"
 thiserror = "1.0.50"
-
-[build-dependencies]
-bindgen = "0.69.1"
+yasqlplus-client = { path = "./yasqlplus-client" }
 
 [profile.release]
 lto = true
 strip = true
 opt-level = "z"
+
+[workspace]
+members = ["yasqlplus-client"]

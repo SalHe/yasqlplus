@@ -11,15 +11,16 @@ use tabled::{
     Table,
 };
 use terminal_size::{terminal_size, Height, Width};
-use yasqlplus::wrapper::{Connection, Executed, LazyExecuted};
+use yasqlplus_client::wrapper::{Connection, Executed, LazyExecuted};
 
-use self::states::States;
+use self::{states::States, table::ColumnWrapper};
 
 mod completer;
 mod conn_str;
 mod helper;
 mod highlight;
 mod states;
+mod table;
 mod validate;
 
 pub use conn_str::parse_connection_string;
@@ -148,7 +149,7 @@ impl App {
                 let columns = result.iter_columns().collect::<Vec<_>>();
                 let (mut table, styling, rows) = if matches!(command, Command::Describe(_)) {
                     let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|_: &mut Table| {});
-                    (Table::new(columns), styling, None)
+                    (Table::new(columns.iter().map(ColumnWrapper)), styling, None)
                 } else {
                     let mut builder = tabled::builder::Builder::default();
                     let mut nulls = Vec::<(usize, usize)>::new();

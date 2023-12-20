@@ -1,7 +1,5 @@
 use std::{cell::Cell, ffi::CStr, fmt::Display, ptr::null_mut};
 
-use tabled::Tabled;
-
 use crate::{
     native::{
         yacColAttribute, EnYacColAttr_YAC_COL_ATTR_CHAR_SIZE,
@@ -85,7 +83,7 @@ impl Default for Type {
     }
 }
 
-#[derive(Debug, Clone, Tabled)]
+#[derive(Debug, Clone)]
 pub struct Column {
     pub display_size: usize,
     pub name: String,

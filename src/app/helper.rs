@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use rustyline::{hint::HistoryHinter, Completer, Helper, Highlighter, Hinter, Validator};
-use yasqlplus::wrapper::Connection;
+use yasqlplus_client::wrapper::Connection;
 
 use super::{completer::YspCompleter, highlight::YspHightligter, validate::YspValidator};
 
