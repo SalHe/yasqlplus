@@ -1,4 +1,4 @@
-use std::{cell::RefCell, cmp::max, io::Write, process::Stdio, rc::Rc};
+use std::{cell::RefCell, io::Write, process::Stdio, rc::Rc};
 
 use colored::Colorize;
 use helper::YspHelper;
@@ -11,9 +11,9 @@ use tabled::{
     Table,
 };
 use terminal_size::{terminal_size, Height, Width};
-use yasqlplus_client::wrapper::{Connection, Executed, LazyExecuted};
+use yasqlplus_client::wrapper::{Connection, Error, Executed, LazyExecuted};
 
-use crate::command::{self, parse_connection_string, Command, InternalCommand};
+use crate::command::{self, parse_command, Command, InternalCommand, ParseError};
 
 use self::{states::States, table::ColumnWrapper};
 
@@ -265,29 +265,13 @@ impl App {
         input
     }
 
-    fn parse_command(input: &str) -> anyhow::Result<Option<Command>> {
-        let command = if input.is_empty() {
-            None
-        } else if let Some(stripped) = input.strip_prefix('!') {
-            Some(Command::Shell(stripped.to_owned()))
-        } else if let Some(table_or_view) = input.strip_prefix("desc ") {
-            Some(Command::Internal(InternalCommand::Describe(
-                table_or_view.to_owned(),
-            )))
-        } else if let Some(conn) = input.strip_prefix("conn ") {
-            Some(
-                parse_connection_string(conn)
-                    .map(|x| Command::Internal(InternalCommand::Connect(x)))?,
-            )
-        } else {
-            Some(Command::SQL(input.to_owned()))
-        };
-        Ok(command)
-    }
-
     fn get_command(&mut self) -> anyhow::Result<()> {
         let input = self.rl.readline(&self.get_prompt())?;
-        self.states.command = App::parse_command(&input)?;
+        self.states.command = match parse_command(&input) {
+            Ok(command) => Some(command),
+            Err(ParseError::Empty) => None,
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(())
     }
@@ -296,7 +280,7 @@ impl App {
         &self,
         connection: &Connection,
         command: &Command,
-    ) -> anyhow::Result<Option<LazyExecuted>> {
+    ) -> Result<Option<LazyExecuted>, Error> {
         let statement = connection.create_statement()?;
 
         let sql = match command {
@@ -312,10 +296,9 @@ impl App {
                     sql[..sql.len() - 1].to_owned()
                 }
             }
-            Command::Internal(InternalCommand::Describe(table_or_view)) => format!(
-                "select * from {table_or_view} where 1=2",
-                table_or_view = &table_or_view[..(max(table_or_view.len() - 1, 0))]
-            ),
+            Command::Internal(InternalCommand::Describe(table_or_view)) => {
+                format!("select * from {table_or_view} where 1=2")
+            }
             Command::Internal(InternalCommand::Connect(_)) => {
                 unreachable!("Connecting should be processed before.")
             }
