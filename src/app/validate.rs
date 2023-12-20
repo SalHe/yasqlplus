@@ -1,5 +1,7 @@
 use rustyline::validate::{ValidationContext, ValidationResult, Validator};
 
+use crate::command::InternalCommand;
+
 use super::{App, Command};
 
 pub struct YspValidator {
@@ -15,7 +17,7 @@ impl Validator for YspValidator {
             if let Ok(Some(command)) = App::parse_command(input) {
                 match command {
                     Command::SQL(sql) => return self.validate_sql(&sql),
-                    Command::Describe(table_or_view) => {
+                    Command::Internal(InternalCommand::Describe(table_or_view)) => {
                         if table_or_view.ends_with(';') {
                             return Ok(ValidationResult::Valid(None));
                         } else {

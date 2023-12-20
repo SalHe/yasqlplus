@@ -13,7 +13,7 @@ use tabled::{
 use terminal_size::{terminal_size, Height, Width};
 use yasqlplus_client::wrapper::{Connection, Executed, LazyExecuted};
 
-use crate::command::{self, parse_connection_string, Command};
+use crate::command::{self, parse_connection_string, Command, InternalCommand};
 
 use self::{states::States, table::ColumnWrapper};
 
@@ -94,12 +94,12 @@ impl App {
 
         let command = self.states.command.as_ref().unwrap();
         match command {
-            Command::Connect(command::Connection {
+            Command::Internal(InternalCommand::Connect(command::Connection {
                 host,
                 port,
                 username,
                 password,
-            }) => {
+            })) => {
                 match self.connect(host.clone(), *port, username.clone(), password.clone()) {
                     Ok(_) => println!("Connected!"),
                     Err(err) => println!("Failed to connect: \n{err}"),
@@ -145,34 +145,37 @@ impl App {
         match resolved {
             Executed::DQL(result) => {
                 let columns = result.iter_columns().collect::<Vec<_>>();
-                let (mut table, styling, rows) = if matches!(command, Command::Describe(_)) {
-                    let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|_: &mut Table| {});
-                    (Table::new(columns.iter().map(ColumnWrapper)), styling, None)
-                } else {
-                    let mut builder = tabled::builder::Builder::default();
-                    let mut nulls = Vec::<(usize, usize)>::new();
-                    let rows = result.rows().collect::<Vec<_>>();
-                    rows.iter().enumerate().for_each(|(y, row)| {
-                        builder.push_record(row.iter().enumerate().map(|(x, value)| match value {
-                            Some(x) => format!("{x}"),
-                            None => {
-                                nulls.push((y, x));
-                                "<null>".to_owned()
-                            }
-                        }));
-                    });
-                    builder.insert_record(0, columns.iter().map(|x| x.name.clone()));
+                let (mut table, styling, rows) =
+                    if matches!(command, Command::Internal(InternalCommand::Describe(_))) {
+                        let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|_: &mut Table| {});
+                        (Table::new(columns.iter().map(ColumnWrapper)), styling, None)
+                    } else {
+                        let mut builder = tabled::builder::Builder::default();
+                        let mut nulls = Vec::<(usize, usize)>::new();
+                        let rows = result.rows().collect::<Vec<_>>();
+                        rows.iter().enumerate().for_each(|(y, row)| {
+                            builder.push_record(row.iter().enumerate().map(
+                                |(x, value)| match value {
+                                    Some(x) => format!("{x}"),
+                                    None => {
+                                        nulls.push((y, x));
+                                        "<null>".to_owned()
+                                    }
+                                },
+                            ));
+                        });
+                        builder.insert_record(0, columns.iter().map(|x| x.name.clone()));
 
-                    let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|table: &mut Table| {
-                        for (row, col) in nulls {
-                            let _ = &table.with(
-                                Modify::new(TableCell::new(row + 1, col))
-                                    .with(Format::content(|x| x.to_owned().italic().to_string())),
-                            );
-                        }
-                    });
-                    (builder.build(), styling, Some(rows.len()))
-                };
+                        let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|table: &mut Table| {
+                            for (row, col) in nulls {
+                                let _ =
+                                    &table.with(Modify::new(TableCell::new(row + 1, col)).with(
+                                        Format::content(|x| x.to_owned().italic().to_string()),
+                                    ));
+                            }
+                        });
+                        (builder.build(), styling, Some(rows.len()))
+                    };
 
                 if rows.is_none() || matches!(rows, Some(row) if row > 0) {
                     let table = table.with(Style::rounded());
@@ -268,9 +271,14 @@ impl App {
         } else if let Some(stripped) = input.strip_prefix('!') {
             Some(Command::Shell(stripped.to_owned()))
         } else if let Some(table_or_view) = input.strip_prefix("desc ") {
-            Some(Command::Describe(table_or_view.to_owned()))
+            Some(Command::Internal(InternalCommand::Describe(
+                table_or_view.to_owned(),
+            )))
         } else if let Some(conn) = input.strip_prefix("conn ") {
-            Some(parse_connection_string(conn).map(Command::Connect)?)
+            Some(
+                parse_connection_string(conn)
+                    .map(|x| Command::Internal(InternalCommand::Connect(x)))?,
+            )
         } else {
             Some(Command::SQL(input.to_owned()))
         };
@@ -304,11 +312,11 @@ impl App {
                     sql[..sql.len() - 1].to_owned()
                 }
             }
-            Command::Describe(table_or_view) => format!(
+            Command::Internal(InternalCommand::Describe(table_or_view)) => format!(
                 "select * from {table_or_view} where 1=2",
                 table_or_view = &table_or_view[..(max(table_or_view.len() - 1, 0))]
             ),
-            Command::Connect(_) => {
+            Command::Internal(InternalCommand::Connect(_)) => {
                 unreachable!("Connecting should be processed before.")
             }
             Command::Shell(_) => unreachable!("Shell command should be processed before."),

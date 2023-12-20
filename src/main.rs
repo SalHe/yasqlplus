@@ -1,4 +1,4 @@
-use command::{parse_connection_string, Command, Connection};
+use command::{parse_connection_string, Command, Connection, InternalCommand};
 
 mod app;
 mod command;
@@ -13,7 +13,9 @@ fn main() -> anyhow::Result<()> {
             password,
         } = &connection;
         if host.is_some() || port.is_some() || username.is_some() || password.is_some() {
-            let _ = app.step(Some(Command::Connect(connection)));
+            let _ = app.step(Some(Command::Internal(InternalCommand::Connect(
+                connection,
+            ))));
         }
     }
 
