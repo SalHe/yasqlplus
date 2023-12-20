@@ -1,8 +1,22 @@
 use anyhow::anyhow;
 
-use super::Command;
+pub struct Connection {
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+}
 
-pub fn parse_connection_string(conn: &str) -> anyhow::Result<Command> {
+#[allow(clippy::upper_case_acronyms)]
+pub enum Command {
+    SQL(String),
+    Shell(String),
+    Describe(String),
+    Connect(Connection),
+}
+
+pub fn parse_connection_string(conn: &str) -> anyhow::Result<Connection> {
+    // TODO support parse role (e.g. sys/xxx as sysdba)
     enum State {
         Username,
         Password,
@@ -66,7 +80,7 @@ pub fn parse_connection_string(conn: &str) -> anyhow::Result<Command> {
         Err(anyhow!("Unsupported connection string format"))
     } else {
         let process = |x: Option<String>| x.and_then(|x| if x.is_empty() { None } else { Some(x) });
-        Ok(Command::Connection {
+        Ok(Connection {
             host: process(host),
             port: match process(port) {
                 Some(s) => match s.parse() {

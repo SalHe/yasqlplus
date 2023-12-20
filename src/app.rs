@@ -13,18 +13,16 @@ use tabled::{
 use terminal_size::{terminal_size, Height, Width};
 use yasqlplus_client::wrapper::{Connection, Executed, LazyExecuted};
 
+use crate::command::{self, parse_connection_string, Command};
+
 use self::{states::States, table::ColumnWrapper};
 
 mod completer;
-mod conn_str;
 mod helper;
 mod highlight;
 mod states;
 mod table;
 mod validate;
-
-pub use conn_str::parse_connection_string;
-pub use states::Command;
 
 const HISTORY_FILE: &str = "yasqlplus-history.txt";
 
@@ -96,12 +94,12 @@ impl App {
 
         let command = self.states.command.as_ref().unwrap();
         match command {
-            Command::Connection {
+            Command::Connect(command::Connection {
                 host,
                 port,
                 username,
                 password,
-            } => {
+            }) => {
                 match self.connect(host.clone(), *port, username.clone(), password.clone()) {
                     Ok(_) => println!("Connected!"),
                     Err(err) => println!("Failed to connect: \n{err}"),
@@ -272,7 +270,7 @@ impl App {
         } else if let Some(table_or_view) = input.strip_prefix("desc ") {
             Some(Command::Describe(table_or_view.to_owned()))
         } else if let Some(conn) = input.strip_prefix("conn ") {
-            Some(parse_connection_string(conn)?)
+            Some(parse_connection_string(conn).map(Command::Connect)?)
         } else {
             Some(Command::SQL(input.to_owned()))
         };
@@ -310,7 +308,9 @@ impl App {
                 "select * from {table_or_view} where 1=2",
                 table_or_view = &table_or_view[..(max(table_or_view.len() - 1, 0))]
             ),
-            Command::Connection { .. } => unreachable!("Connecting should be processed before."),
+            Command::Connect(_) => {
+                unreachable!("Connecting should be processed before.")
+            }
             Command::Shell(_) => unreachable!("Shell command should be processed before."),
         };
         let result = statement.execute_sql(&sql)?;
