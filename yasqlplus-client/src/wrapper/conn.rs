@@ -35,7 +35,7 @@ impl Connection {
         })
     }
 
-    pub fn create_statement(&self) -> anyhow::Result<Statement> {
+    pub fn create_statement(&self) -> Result<Statement, Error> {
         let stmt = StatementHandle::new(&self.conn_handle)?;
         Ok(stmt.into())
     }

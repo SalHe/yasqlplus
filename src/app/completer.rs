@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use rustyline::completion::{Candidate, Completer};
-use yasqlplus::wrapper::Connection;
+use yasqlplus_client::wrapper::Connection;
 
 pub struct YspCompleter {
     connection: Rc<RefCell<Option<Connection>>>,
@@ -117,7 +117,7 @@ impl YspCompleter {
                         .result_set()
                         .rows()
                         .map(|r| match r[0].as_ref().unwrap() {
-                            yasqlplus::wrapper::Value::VarChar(t) => t.clone(),
+                            yasqlplus_client::wrapper::Value::VarChar(t) => t.clone(),
                             _ => unreachable!(),
                         })
                         .collect::<Vec<_>>();

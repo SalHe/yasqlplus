@@ -1,3 +1,4 @@
 /target
 yas-client
 yasqlplus-history.txt
+.env.dev

@@ -1145,12 +1145,20 @@ name = "yasqlplus"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "bindgen",
  "colored",
  "console",
  "rustyline",
  "syntect",
  "tabled",
  "terminal_size",
+ "thiserror",
+ "yasqlplus-client",
+]
+
+[[package]]
+name = "yasqlplus-client"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
  "thiserror",
 ]
