@@ -33,7 +33,6 @@ pub mod input;
 pub struct App {
     context: Rc<RwLock<Context>>,
     input: Box<dyn InputSource>,
-    exit: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -50,39 +49,31 @@ impl App {
         input: Box<dyn InputSource>,
         context: Rc<RwLock<Context>>,
     ) -> Result<Self, AppError> {
-        Ok(App {
-            input,
-            context,
-            exit: false,
-        })
+        Ok(App { input, context })
     }
 
     pub fn run(&mut self) -> Result<(), AppError> {
-        while !self.exit {
-            self.step(None)?;
+        loop {
+            if let Err(err) = self.step(None) {
+                match err {
+                    AppError::Input(input_error) => match input_error {
+                        InputError::Eof => break,
+                        InputError::Cancelled => {}
+                        _ => {
+                            println!("{input_error}")
+                        }
+                    },
+                    AppError::Io(err) => println!("{err}"),
+                }
+            }
         }
         Ok(())
     }
 
     pub fn step(&mut self, command: Option<Command>) -> Result<(), AppError> {
         let command = match command {
-            Some(command) => Some(command),
-            None => {
-                match self.input.get_command() {
-                    Ok(command) => command,
-                    Err(InputError::Eof) => {
-                        // EOF/Ctrl+D ==> exit
-                        self.exit = true;
-                        return Ok(());
-                    }
-                    Err(InputError::Cancelled) => {
-                        // EOF/Ctrl+D ==> exit
-                        self.exit = true;
-                        return Ok(());
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
+            Some(_) => command,
+            None => self.input.get_command()?,
         };
         let mut ctx = self.context.write().unwrap();
         ctx.set_command(command);

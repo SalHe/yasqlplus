@@ -13,7 +13,7 @@ pub enum ParseError {
     Incomplete(String),
 
     // Parsing error.
-    #[error("Failed to parse command: {command}. \nError{err}")]
+    #[error("Failed to parse command:\n{command}. \n{err}")]
     ParsingError {
         err: ConnParsingError,
         command: String,
