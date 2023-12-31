@@ -93,25 +93,52 @@ impl App {
         }
 
         let command = command.as_ref().unwrap();
+        if command.need_connection() && ctx.get_connection().is_none() {
+            println!("Not connected!");
+            return Ok(());
+        }
+
         match command {
-            Command::Internal(InternalCommand::Connect(command::Connection {
-                host,
-                port,
-                username,
-                password,
-            })) => {
-                match self.connect(host.clone(), *port, username.clone(), password.clone()) {
-                    Ok((conn, prompt)) => {
-                        ctx.set_connection(Some(conn));
-                        ctx.set_prompt(prompt);
-                        println!("Connected!");
+            Command::Internal(internal) => match internal {
+                InternalCommand::Connect(command::Connection {
+                    host,
+                    port,
+                    username,
+                    password,
+                }) => {
+                    match self.connect(host.clone(), *port, username.clone(), password.clone()) {
+                        Ok((conn, prompt)) => {
+                            ctx.set_connection(Some(conn));
+                            ctx.set_prompt(prompt);
+                            println!("Connected!");
+                        }
+                        Err(err) => {
+                            ctx.set_connection(None);
+                            println!("Failed to connect: ");
+                            self.print_execute_sql_error(err);
+                        }
                     }
-                    Err(err) => {
-                        ctx.set_connection(None);
-                        println!("Failed to connect: \n{err}");
-                    }
+                    Ok(())
                 }
-                return Ok(());
+                InternalCommand::Describe(table_or_view) => self.execute_sql_and_show(
+                    ctx.get_connection().as_ref().unwrap(),
+                    &format!("select * from {table_or_view} where 1=2"),
+                    Some(internal),
+                ),
+            },
+            Command::SQL(sql) => {
+                if sql.lines().count() == 1 && sql.starts_with("--") {
+                    // comment
+                    return Ok(());
+                }
+                let sql = if sql.is_empty() || !sql.ends_with([';', '/']) {
+                    sql
+                } else {
+                    // trim trailing ';' for statement
+                    //               '/' for block
+                    &sql[..sql.len() - 1]
+                };
+                self.execute_sql_and_show(ctx.get_connection().as_ref().unwrap(), sql, None)
             }
             Command::Shell(shell) => {
                 std::process::Command::new("sh")
@@ -122,29 +149,9 @@ impl App {
                     .stderr(Stdio::inherit())
                     .spawn()?
                     .wait()?;
-                return Ok(());
-            }
-            _ => {}
-        }
-
-        match ctx.get_connection().as_ref() {
-            Some(connection) => {
-                let result = self.execute_command(connection, command);
-                match result {
-                    Ok(Some(result)) => match self.show_result(result, command) {
-                        Ok(_) => {}
-                        Err(err) => println!("{err}"),
-                    },
-                    Ok(None) => {} // comment
-                    Err(err) => self.print_execute_sql_error(err),
-                }
-            }
-            None => {
-                println!("Not connected!");
+                Ok(())
             }
         }
-
-        Ok(())
     }
 
     fn print_execute_sql_error(&self, err: Error) {
@@ -209,13 +216,17 @@ impl App {
         }
     }
 
-    fn show_result(&self, result: LazyExecuted, command: &Command) -> anyhow::Result<()> {
+    fn show_result(
+        &self,
+        result: LazyExecuted,
+        command: Option<&InternalCommand>,
+    ) -> anyhow::Result<()> {
         let resolved = result.resolve()?;
         match resolved {
             Executed::DQL(result) => {
                 let columns = result.iter_columns().collect::<Vec<_>>();
                 let (mut table, styling, rows) =
-                    if matches!(command, Command::Internal(InternalCommand::Describe(_))) {
+                    if matches!(command, Some(InternalCommand::Describe(_))) {
                         let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|_: &mut Table| {});
                         (Table::new(columns.iter().map(ColumnWrapper)), styling, None)
                     } else {
@@ -293,7 +304,7 @@ impl App {
         port: Option<u16>,
         username: Option<String>,
         password: Option<String>,
-    ) -> anyhow::Result<(Connection, String)> {
+    ) -> anyhow::Result<(Connection, String), Error> {
         let host = match host {
             Some(v) => v,
             None => "127.0.0.1".to_owned(),
@@ -309,39 +320,30 @@ impl App {
         };
         match Connection::connect(&host, port, &username, &password) {
             Ok(conn) => Ok((conn, format!("{username}@{host}:{port} > "))),
-            Err(err) => Err(err.into()),
+            Err(err) => Err(err),
         }
     }
 
-    fn execute_command(
+    fn execute_sql(&self, connection: &Connection, sql: &str) -> Result<LazyExecuted, Error> {
+        let statement = connection.create_statement()?;
+        let result = statement.execute_sql(sql)?;
+        Ok(result)
+    }
+
+    fn execute_sql_and_show(
         &self,
         connection: &Connection,
-        command: &Command,
-    ) -> Result<Option<LazyExecuted>, Error> {
-        let statement = connection.create_statement()?;
-
-        let sql = match command {
-            Command::SQL(sql) => {
-                if sql.lines().count() == 1 && sql.starts_with("--") {
-                    return Ok(None);
-                }
-                if sql.is_empty() || !sql.ends_with([';', '/']) {
-                    sql.to_owned()
-                } else {
-                    // trim trailing ';' for statement
-                    //               '/' for block
-                    sql[..sql.len() - 1].to_owned()
-                }
-            }
-            Command::Internal(InternalCommand::Describe(table_or_view)) => {
-                format!("select * from {table_or_view} where 1=2")
-            }
-            Command::Internal(InternalCommand::Connect(_)) => {
-                unreachable!("Connecting should be processed before.")
-            }
-            Command::Shell(_) => unreachable!("Shell command should be processed before."),
-        };
-        let result = statement.execute_sql(&sql)?;
-        Ok(Some(result))
+        sql: &str,
+        command: Option<&InternalCommand>,
+    ) -> Result<(), AppError> {
+        let result = self.execute_sql(connection, sql);
+        match result {
+            Ok(result) => match self.show_result(result, command) {
+                Ok(_) => {}
+                Err(err) => println!("{err}"),
+            },
+            Err(err) => self.print_execute_sql_error(err),
+        }
+        Ok(())
     }
 }

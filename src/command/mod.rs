@@ -20,3 +20,16 @@ pub enum InternalCommand {
     Describe(String),
     Connect(Connection),
 }
+
+impl Command {
+    pub fn need_connection(&self) -> bool {
+        match self {
+            Command::SQL(_) => true,
+            Command::Shell(_) => false,
+            Command::Internal(internal) => match internal {
+                InternalCommand::Describe(_) => true,
+                InternalCommand::Connect(_) => false,
+            },
+        }
+    }
+}
