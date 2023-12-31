@@ -1,4 +1,4 @@
-use std::{io::Write, process::Stdio, rc::Rc, sync::RwLock};
+use std::{cell::RefCell, io::Write, process::Stdio, rc::Rc, sync::RwLock};
 
 use colored::Colorize;
 
@@ -18,6 +18,7 @@ use crate::command::{self, Command, InternalCommand};
 use self::{
     context::Context,
     input::{InputError, InputSource},
+    output::Output,
     table::ColumnWrapper,
 };
 
@@ -29,16 +30,21 @@ mod validate;
 
 pub mod context;
 pub mod input;
+pub mod output;
 
 pub struct App {
     context: Rc<RwLock<Context>>,
     input: Box<dyn InputSource>,
+    output: RefCell<Box<dyn Output>>,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("Input error: {0}")]
     Input(#[from] InputError),
+
+    #[error("Client error: {0}")]
+    Client(#[from] Error),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -47,9 +53,14 @@ pub enum AppError {
 impl App {
     pub fn new(
         input: Box<dyn InputSource>,
+        output: Box<dyn Output>,
         context: Rc<RwLock<Context>>,
     ) -> Result<Self, AppError> {
-        Ok(App { input, context })
+        Ok(App {
+            input,
+            context,
+            output: RefCell::new(output),
+        })
     }
 
     pub fn run(&mut self) -> Result<(), AppError> {
@@ -59,11 +70,10 @@ impl App {
                     AppError::Input(input_error) => match input_error {
                         InputError::Eof => break,
                         InputError::Cancelled => {}
-                        _ => {
-                            println!("{input_error}")
-                        }
+                        _ => writeln!(self.output.borrow_mut(), "{input_error}")?,
                     },
-                    AppError::Io(err) => println!("{err}"),
+                    AppError::Io(err) => writeln!(self.output.borrow_mut(), "{err}")?,
+                    AppError::Client(err) => self.print_execute_sql_error(err)?,
                 }
             }
         }
@@ -85,7 +95,7 @@ impl App {
 
         let command = command.as_ref().unwrap();
         if command.need_connection() && ctx.get_connection().is_none() {
-            println!("Not connected!");
+            writeln!(self.output.borrow_mut(), "Not connected!")?;
             return Ok(());
         }
 
@@ -101,12 +111,12 @@ impl App {
                         Ok((conn, prompt)) => {
                             ctx.set_connection(Some(conn));
                             ctx.set_prompt(prompt);
-                            println!("Connected!");
+                            writeln!(self.output.borrow_mut(), "Connected!")?;
                         }
                         Err(err) => {
                             ctx.set_connection(None);
-                            println!("Failed to connect: ");
-                            self.print_execute_sql_error(err);
+                            writeln!(self.output.borrow_mut(), "Failed to connect: ")?;
+                            self.print_execute_sql_error(err)?;
                         }
                     }
                     Ok(())
@@ -145,7 +155,7 @@ impl App {
         }
     }
 
-    fn print_execute_sql_error(&self, err: Error) {
+    fn print_execute_sql_error(&self, err: Error) -> Result<(), AppError> {
         match err {
             Error::YasClient(err) => match err.pos {
                 (0, 0) => {
@@ -155,15 +165,17 @@ impl App {
                         code,
                         ..
                     } = err;
-                    println!(
+                    writeln!(
+                        self.output.borrow_mut(),
                         "{}",
                         format!("YAS-{code:0>5}: {message} (SQL State: {sql_state})").red()
-                    )
+                    )?
                 }
                 (line, column) => match &err.sql {
                     Some(sql) => {
                         if sql.is_empty() {
-                            return println!("{}", err.message.red());
+                            return writeln!(self.output.borrow_mut(), "{}", err.message.red())
+                                .map_err(Into::into);
                         }
                         let mut lines = vec![];
 
@@ -198,20 +210,21 @@ impl App {
                             .red()
                             .to_string(),
                         );
-                        println!("{}", lines.join("\n"))
+                        writeln!(self.output.borrow_mut(), "{}", lines.join("\n"))?
                     }
-                    None => println!("{:?}", err),
+                    None => writeln!(self.output.borrow_mut(), "{:?}", err)?,
                 },
             },
             Error::Other => todo!(),
         }
+        Ok(())
     }
 
     fn show_result(
         &self,
         result: LazyExecuted,
         command: Option<&InternalCommand>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), AppError> {
         let resolved = result.resolve()?;
         match resolved {
             Executed::DQL(result) => {
@@ -252,18 +265,20 @@ impl App {
                     let table = table.with(Style::rounded());
                     self.show_long_if_necessary(&table.to_string());
                     styling(table);
-                    println!("{table}");
+                    writeln!(self.output.borrow_mut(), "{table}")?;
                 }
 
                 if let Some(rows) = rows {
-                    println!("{rows} row(s) fetched");
+                    writeln!(self.output.borrow_mut(), "{rows} row(s) fetched")?;
                 }
             }
-            Executed::DML(affection) => {
-                println!("{} row(s) affected", affection.affected())
-            }
-            Executed::DCL(_instruction) => println!("DCL executed"),
-            Executed::Unknown(_) => println!("Succeed"),
+            Executed::DML(affection) => writeln!(
+                self.output.borrow_mut(),
+                "{} row(s) affected",
+                affection.affected()
+            )?,
+            Executed::DCL(_instruction) => writeln!(self.output.borrow_mut(), "DCL executed")?,
+            Executed::Unknown(_) => writeln!(self.output.borrow_mut(), "Succeed")?,
         };
         Ok(())
     }
@@ -331,9 +346,9 @@ impl App {
         match result {
             Ok(result) => match self.show_result(result, command) {
                 Ok(_) => {}
-                Err(err) => println!("{err}"),
+                Err(err) => writeln!(self.output.borrow_mut(), "{err}")?,
             },
-            Err(err) => self.print_execute_sql_error(err),
+            Err(err) => self.print_execute_sql_error(err)?,
         }
         Ok(())
     }

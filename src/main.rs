@@ -8,9 +8,10 @@ mod command;
 
 fn main() -> Result<(), AppError> {
     let ctx = Rc::new(RwLock::new(Context::default()));
-    let input = ShellInput::new(ctx.clone())?;
+    let input = Box::new(ShellInput::new(ctx.clone())?);
+    let output = Box::new(std::io::stdout());
 
-    let mut app = app::App::new(Box::new(input), ctx)?;
+    let mut app = app::App::new(input, output, ctx)?;
     if let Ok(connection) = parse_connection_string(&std::env::args().nth(1).unwrap_or_default()) {
         let Connection {
             host,
