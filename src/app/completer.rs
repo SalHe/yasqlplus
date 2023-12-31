@@ -1,16 +1,17 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::RwLock};
 
 use rustyline::completion::{Candidate, Completer};
-use yasqlplus_client::wrapper::Connection;
+
+use super::context::Context;
 
 pub struct YspCompleter {
-    connection: Rc<RefCell<Option<Connection>>>,
+    connection: Rc<RwLock<Context>>,
     tables: RefCell<Vec<String>>,
     views: RefCell<Vec<String>>,
 }
 
 impl YspCompleter {
-    pub fn new(connection: Rc<RefCell<Option<Connection>>>) -> Self {
+    pub fn new(connection: Rc<RwLock<Context>>) -> Self {
         Self {
             connection,
             tables: Default::default(),
@@ -110,7 +111,7 @@ impl YspCompleter {
     }
 
     fn get_tables_or_views(&self, sql: &str) -> Vec<String> {
-        if let Some(connection) = self.connection.borrow().as_ref() {
+        if let Some(connection) = self.connection.read().unwrap().get_connection() {
             if let Ok(stmt) = connection.create_statement() {
                 if let Ok(result) = stmt.execute_sql(sql) {
                     return result
@@ -128,7 +129,7 @@ impl YspCompleter {
     }
 
     fn get_columns(&self, table_or_view: &str, prefix: &str) -> Vec<YspCandidate> {
-        if let Some(connection) = self.connection.borrow().as_ref() {
+        if let Some(connection) = self.connection.read().unwrap().get_connection() {
             if let Ok(stmt) = connection.create_statement() {
                 if let Ok(result) =
                     stmt.execute_sql(&format!("select * from {table_or_view} where 1 = 2"))

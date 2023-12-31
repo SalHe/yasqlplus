@@ -1,11 +1,7 @@
-use std::{cell::RefCell, io::Write, process::Stdio, rc::Rc};
+use std::{io::Write, process::Stdio, rc::Rc, sync::RwLock};
 
 use colored::Colorize;
-use helper::YspHelper;
-use rustyline::{
-    error::ReadlineError, history::FileHistory, Cmd, CompletionType, Config, EditMode, Editor,
-    EventHandler, KeyEvent,
-};
+
 use syntect::{
     easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet,
     util::as_24_bit_terminal_escaped,
@@ -17,86 +13,86 @@ use tabled::{
 use terminal_size::{terminal_size, Height, Width};
 use yasqlplus_client::wrapper::{Connection, DiagInfo, Error, Executed, LazyExecuted};
 
-use crate::command::{self, parse_command, Command, InternalCommand, ParseError};
+use crate::command::{self, Command, InternalCommand};
 
-use self::{states::States, table::ColumnWrapper};
+use self::{
+    context::Context,
+    input::{InputError, InputSource},
+    table::ColumnWrapper,
+};
 
 mod completer;
 mod helper;
 mod highlight;
-mod states;
 mod table;
 mod validate;
 
-const HISTORY_FILE: &str = "yasqlplus-history.txt";
+pub mod context;
+pub mod input;
 
 pub struct App {
-    connection: Rc<RefCell<Option<Connection>>>,
-    prompt_conn: String,
-    rl: Editor<YspHelper, FileHistory>,
-    states: States,
+    context: Rc<RwLock<Context>>,
+    input: Box<dyn InputSource>,
     exit: bool,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum AppError {
+    #[error("Input error: {0}")]
+    Input(#[from] InputError),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
+
 impl App {
-    pub fn new() -> anyhow::Result<Self> {
-        let config = Config::builder()
-            .history_ignore_space(true)
-            .completion_type(CompletionType::Circular)
-            .edit_mode(EditMode::Vi)
-            .auto_add_history(true)
-            .history_ignore_dups(true)?
-            .build();
-        let mut rl = Editor::with_config(config)?;
-        let connection = Rc::new(RefCell::new(None));
-        rl.set_helper(Some(YspHelper::new(connection.clone())));
-        rl.bind_sequence(KeyEvent::alt('s'), EventHandler::Simple(Cmd::Newline));
-        let _ = rl.load_history(HISTORY_FILE);
+    pub fn new(
+        input: Box<dyn InputSource>,
+        context: Rc<RwLock<Context>>,
+    ) -> Result<Self, AppError> {
         Ok(App {
-            rl,
-            connection,
-            states: States::default(),
-            prompt_conn: Default::default(),
+            input,
+            context,
             exit: false,
         })
     }
 
-    pub fn run(&mut self) -> anyhow::Result<()> {
+    pub fn run(&mut self) -> Result<(), AppError> {
         while !self.exit {
             self.step(None)?;
         }
         Ok(())
     }
 
-    pub fn step(&mut self, command: Option<Command>) -> anyhow::Result<()> {
-        match command {
-            Some(command) => self.states.command = Some(command),
+    pub fn step(&mut self, command: Option<Command>) -> Result<(), AppError> {
+        let command = match command {
+            Some(command) => Some(command),
             None => {
-                if let Err(err) = self.get_command() {
-                    match err.downcast::<ReadlineError>() {
-                        Ok(rl_err) => match rl_err {
-                            ReadlineError::Eof => {
-                                // EOF/Ctrl+D ==> exit
-                                self.exit = true;
-                                return Ok(());
-                            }
-                            ReadlineError::Interrupted => return Ok(()), // Ctrl + C ==> next command
-                            _ => return Err(rl_err.into()),
-                        },
-                        Err(err) => {
-                            println!("Error command: {err}");
-                            return Ok(());
-                        }
-                    };
+                match self.input.get_command() {
+                    Ok(command) => command,
+                    Err(InputError::Eof) => {
+                        // EOF/Ctrl+D ==> exit
+                        self.exit = true;
+                        return Ok(());
+                    }
+                    Err(InputError::Cancelled) => {
+                        // EOF/Ctrl+D ==> exit
+                        self.exit = true;
+                        return Ok(());
+                    }
+                    Err(err) => return Err(err.into()),
                 }
             }
-        }
+        };
+        let mut ctx = self.context.write().unwrap();
+        ctx.set_command(command);
 
-        if self.states.command.is_none() {
+        let command = ctx.get_command();
+        if command.is_none() {
             return Ok(());
         }
 
-        let command = self.states.command.as_ref().unwrap();
+        let command = command.as_ref().unwrap();
         match command {
             Command::Internal(InternalCommand::Connect(command::Connection {
                 host,
@@ -105,8 +101,15 @@ impl App {
                 password,
             })) => {
                 match self.connect(host.clone(), *port, username.clone(), password.clone()) {
-                    Ok(_) => println!("Connected!"),
-                    Err(err) => println!("Failed to connect: \n{err}"),
+                    Ok((conn, prompt)) => {
+                        ctx.set_connection(Some(conn));
+                        ctx.set_prompt(prompt);
+                        println!("Connected!");
+                    }
+                    Err(err) => {
+                        ctx.set_connection(None);
+                        println!("Failed to connect: \n{err}");
+                    }
                 }
                 return Ok(());
             }
@@ -124,7 +127,7 @@ impl App {
             _ => {}
         }
 
-        match self.connection.borrow().as_ref() {
+        match ctx.get_connection().as_ref() {
             Some(connection) => {
                 let result = self.execute_command(connection, command);
                 match result {
@@ -284,20 +287,13 @@ impl App {
         }
     }
 
-    fn get_prompt(&self) -> String {
-        match self.connection.borrow().as_ref() {
-            Some(_) => self.prompt_conn.clone().green().to_string(),
-            None => "SQL > ".to_owned(),
-        }
-    }
-
     fn connect(
-        &mut self,
+        &self,
         host: Option<String>,
         port: Option<u16>,
         username: Option<String>,
         password: Option<String>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(Connection, String)> {
         let host = match host {
             Some(v) => v,
             None => "127.0.0.1".to_owned(),
@@ -305,41 +301,16 @@ impl App {
         let port = port.unwrap_or(1688);
         let username = match username {
             Some(v) => v.clone(),
-            None => self.normal_input("Username: ")?,
+            None => self.input.line("Username: ").unwrap_or_default(),
         };
         let password = match password {
             Some(v) => v.clone(),
-            None => self.normal_input("Password: ")?,
+            None => self.input.line("Password: ").unwrap_or_default(),
         };
         match Connection::connect(&host, port, &username, &password) {
-            Ok(conn) => {
-                self.prompt_conn = format!("{username}@{host}:{port} > ");
-                self.connection.replace(Some(conn))
-            }
-            Err(err) => {
-                self.connection.replace(None);
-                return Err(err.into());
-            }
-        };
-        Ok(())
-    }
-
-    fn normal_input(&mut self, prompt: &str) -> Result<String, ReadlineError> {
-        self.rl.helper_mut().unwrap().disable_validation();
-        let input = self.rl.readline(prompt);
-        self.rl.helper_mut().unwrap().enable_validation();
-        input
-    }
-
-    fn get_command(&mut self) -> anyhow::Result<()> {
-        let input = self.rl.readline(&self.get_prompt())?;
-        self.states.command = match parse_command(&input) {
-            Ok(command) => Some(command),
-            Err(ParseError::Empty) => None,
-            Err(err) => return Err(err.into()),
-        };
-
-        Ok(())
+            Ok(conn) => Ok((conn, format!("{username}@{host}:{port} > "))),
+            Err(err) => Err(err.into()),
+        }
     }
 
     fn execute_command(
@@ -372,11 +343,5 @@ impl App {
         };
         let result = statement.execute_sql(&sql)?;
         Ok(Some(result))
-    }
-}
-
-impl Drop for App {
-    fn drop(&mut self) {
-        let _ = self.rl.append_history(HISTORY_FILE);
     }
 }

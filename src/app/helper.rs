@@ -1,9 +1,10 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{rc::Rc, sync::RwLock};
 
 use rustyline::{hint::HistoryHinter, Completer, Helper, Highlighter, Hinter, Validator};
-use yasqlplus_client::wrapper::Connection;
 
-use super::{completer::YspCompleter, highlight::YspHightligter, validate::YspValidator};
+use super::{
+    completer::YspCompleter, context::Context, highlight::YspHightligter, validate::YspValidator,
+};
 
 #[derive(Completer, Helper, Highlighter, Hinter, Validator)]
 pub struct YspHelper {
@@ -18,12 +19,12 @@ pub struct YspHelper {
 }
 
 impl YspHelper {
-    pub fn new(connection: Rc<RefCell<Option<Connection>>>) -> Self {
+    pub fn new(context: Rc<RwLock<Context>>) -> Self {
         YspHelper {
             validator: YspValidator::new(),
             hinter: HistoryHinter::new(),
             hightligter: YspHightligter::new(),
-            completer: YspCompleter::new(connection),
+            completer: YspCompleter::new(context),
         }
     }
 
