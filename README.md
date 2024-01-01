@@ -73,16 +73,7 @@ sys@127.0.0.1:1688 >
 ➜  ~
 ```
 
-### Compared with yasql
-
-Single statement and sql scripts are supported in yasql by giving specified cli arguments.
-
-Currently YaSQL+ doesn't supply cli arguments for achieving this. But you can do it with methods below.
-
-- Execute a single line SQL: `echo 'SELECT * FROM v$instance;' | yasqlplus sys/Cod-2022`
-- Execute SQL scripts: `cat input.sql | yasqlplus sys/Cod-2022`
-
-More tricks:
+### Tricks
 
 - To save result to file, you could redirect stdout to a file, like `echo 'SELECT * FROM dba_Tables limit 1;' | yasqlplus sys/Cod-2022 > output`
 - To disable show wide content in `less` you could pipe out to `cat` like this `echo 'SELECT * FROM dba_Tables limit 1;' | yasqlplus sys/Cod-2022 | cat`.
