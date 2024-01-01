@@ -8,7 +8,7 @@ use crate::command::{parse_command, Command, ParseError};
 
 use crate::app::{context::Context, helper::YspHelper};
 
-use super::{Input, InputError, InputSettings};
+use super::{Input, InputError};
 
 const HISTORY_FILE: &str = "yasqlplus-history.txt";
 
@@ -34,12 +34,6 @@ impl ShellInput {
             rl: RefCell::new(rl),
             context,
         })
-    }
-}
-
-impl InputSettings for ShellInput {
-    fn need_echo(&self) -> bool {
-        false
     }
 }
 

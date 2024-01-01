@@ -85,7 +85,7 @@ impl App {
         let mut ctx = self.context.write().unwrap();
         ctx.set_command(command);
 
-        if self.input.need_echo() {
+        if ctx.need_echo() {
             println!("{}{}", ctx.get_prompt(), command_str.unwrap_or_default());
         }
 

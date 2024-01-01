@@ -2,7 +2,7 @@ use std::{fs::File, io::BufReader, rc::Rc, sync::RwLock};
 
 use app::{
     context::Context,
-    input::{BufReaderInput, Input, ShellInput},
+    input::{BufReaderInput, Input, ShellInput, SingleCommand},
     AppError,
 };
 use clap::Parser;
@@ -53,19 +53,26 @@ struct Cli {
     /// SQL scripts file.
     #[arg(short, long)]
     file: Option<String>,
+
+    /// Single command.
+    #[arg(short, long)]
+    command: Option<String>,
 }
 
 fn main() -> Result<(), AppError> {
     let args = Cli::parse();
 
-    let ctx = Rc::new(RwLock::new(Context::default()));
-    let input: Box<dyn Input> = match args.file {
-        // TODO support network file(e.g. http/https)
-        Some(input) => Box::new(BufReaderInput::new(
-            BufReader::new(File::open(input)?),
-            args.echo,
-        )),
-        None => Box::new(ShellInput::new(ctx.clone())?),
+    let mut ctx = Context::default();
+    ctx.set_need_echo(args.echo);
+
+    let ctx = Rc::new(RwLock::new(ctx));
+    let input: Box<dyn Input> = match args.command {
+        Some(command) => Box::new(SingleCommand::new(command)),
+        None => match args.file {
+            // TODO support network file(e.g. http/https)
+            Some(input) => Box::new(BufReaderInput::new(BufReader::new(File::open(input)?))),
+            None => Box::new(ShellInput::new(ctx.clone())?),
+        },
     };
     let mut app = app::App::new(input, ctx)?;
 

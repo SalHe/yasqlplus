@@ -8,6 +8,7 @@ pub struct Context {
     connection: Option<Connection>,
     prompt_conn: String,
     last_command: Option<Command>,
+    need_echo: bool,
 }
 
 impl Context {
@@ -37,5 +38,13 @@ impl Context {
 
     pub fn set_command(&mut self, command: Option<Command>) {
         self.last_command = command;
+    }
+
+    pub fn need_echo(&self) -> bool {
+        self.need_echo
+    }
+
+    pub fn set_need_echo(&mut self, need_echo: bool) {
+        self.need_echo = need_echo;
     }
 }
