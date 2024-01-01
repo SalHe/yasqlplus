@@ -1,15 +1,46 @@
-use anyhow::anyhow;
+use std::num::ParseIntError;
 
-use super::Command;
+use thiserror::Error;
 
-pub fn parse_connection_string(conn: &str) -> anyhow::Result<Command> {
-    enum State {
-        Username,
-        Password,
-        Host,
-        Port,
+#[derive(Debug, Default)]
+pub struct Connection {
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+}
+
+impl Connection {
+    pub fn any_valid(&self) -> bool {
+        self.host.is_some()
+            || self.port.is_some()
+            || self.username.is_some()
+            || self.password.is_some()
     }
+}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum State {
+    Username,
+    Password,
+    Host,
+    Port,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ConnParsingError {
+    #[error("Failed to parsing port: {0}")]
+    Port(ParseIntError),
+
+    #[error("Desired: {0:?}")]
+    Expected(State),
+
+    #[error("Invalid format.")]
+    Invalid,
+}
+
+pub fn parse_connection_string(conn: &str) -> Result<Connection, ConnParsingError> {
+    // TODO support parse role (e.g. sys/xxx as sysdba)
     let mut last_index = 0;
     let mut state = State::Username;
     let mut username = None;
@@ -54,7 +85,7 @@ pub fn parse_connection_string(conn: &str) -> anyhow::Result<Command> {
                     break;
                 }
                 (_, _) => {
-                    return Err(anyhow!("Unsupported connection string format"));
+                    return Err(ConnParsingError::Expected(state));
                 }
             }
             last_index = id + 1;
@@ -63,15 +94,15 @@ pub fn parse_connection_string(conn: &str) -> anyhow::Result<Command> {
 
     if conn.len() + 1 != last_index {
         // SEP_END
-        Err(anyhow!("Unsupported connection string format"))
+        Err(ConnParsingError::Invalid)
     } else {
         let process = |x: Option<String>| x.and_then(|x| if x.is_empty() { None } else { Some(x) });
-        Ok(Command::Connection {
+        Ok(Connection {
             host: process(host),
             port: match process(port) {
                 Some(s) => match s.parse() {
                     Ok(port) => Some(port),
-                    Err(err) => return Err(err.into()),
+                    Err(err) => return Err(ConnParsingError::Port(err)),
                 },
                 None => None,
             },

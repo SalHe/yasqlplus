@@ -1,112 +1,146 @@
-use std::{cell::RefCell, cmp::max, io::Write, process::Stdio, rc::Rc};
+use std::{io::Write, process::Stdio, rc::Rc, sync::RwLock};
 
 use colored::Colorize;
-use helper::YspHelper;
-use rustyline::{
-    error::ReadlineError, history::FileHistory, Cmd, CompletionType, Config, EditMode, Editor,
-    EventHandler, KeyEvent,
+
+use syntect::{
+    easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet,
+    util::as_24_bit_terminal_escaped,
 };
 use tabled::{
     settings::{object::Cell as TableCell, Format, Modify, Style},
     Table,
 };
 use terminal_size::{terminal_size, Height, Width};
-use yasqlplus_client::wrapper::{Connection, Executed, LazyExecuted};
+use yasqlplus_client::wrapper::{Connection, DiagInfo, Error, Executed, LazyExecuted};
 
-use self::{states::States, table::ColumnWrapper};
+use crate::command::{self, Command, InternalCommand, ParseError};
+
+use self::{
+    context::Context,
+    input::{Input, InputError},
+    table::ColumnWrapper,
+};
 
 mod completer;
-mod conn_str;
 mod helper;
 mod highlight;
-mod states;
 mod table;
 mod validate;
 
-pub use conn_str::parse_connection_string;
-pub use states::Command;
-
-const HISTORY_FILE: &str = "yasqlplus-history.txt";
+pub mod context;
+pub mod input;
 
 pub struct App {
-    connection: Rc<RefCell<Option<Connection>>>,
-    prompt_conn: String,
-    rl: Editor<YspHelper, FileHistory>,
-    states: States,
-    exit: bool,
+    context: Rc<RwLock<Context>>,
+    input: Box<dyn Input>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AppError {
+    #[error("Input error: {0}")]
+    Input(#[from] InputError),
+
+    #[error("Client error: {0}")]
+    Client(#[from] Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 impl App {
-    pub fn new() -> anyhow::Result<Self> {
-        let config = Config::builder()
-            .history_ignore_space(true)
-            .completion_type(CompletionType::Circular)
-            .edit_mode(EditMode::Vi)
-            .auto_add_history(true)
-            .history_ignore_dups(true)?
-            .build();
-        let mut rl = Editor::with_config(config)?;
-        let connection = Rc::new(RefCell::new(None));
-        rl.set_helper(Some(YspHelper::new(connection.clone())));
-        rl.bind_sequence(KeyEvent::alt('s'), EventHandler::Simple(Cmd::Newline));
-        let _ = rl.load_history(HISTORY_FILE);
-        Ok(App {
-            rl,
-            connection,
-            states: States::default(),
-            prompt_conn: Default::default(),
-            exit: false,
-        })
+    pub fn new(input: Box<dyn Input>, context: Rc<RwLock<Context>>) -> Result<Self, AppError> {
+        Ok(App { input, context })
     }
 
-    pub fn run(&mut self) -> anyhow::Result<()> {
-        while !self.exit {
-            self.step(None)?;
+    pub fn run(&mut self) -> Result<(), AppError> {
+        loop {
+            if let Err(err) = self.step(None) {
+                match err {
+                    AppError::Input(input_error) => match input_error {
+                        InputError::Eof => break,
+                        InputError::Cancelled => {}
+                        _ => println!("{input_error}"),
+                    },
+                    AppError::Io(err) => println!("{err}"),
+                    AppError::Client(err) => self.print_execute_sql_error(err)?,
+                }
+            }
         }
         Ok(())
     }
 
-    pub fn step(&mut self, command: Option<Command>) -> anyhow::Result<()> {
-        match command {
-            Some(command) => self.states.command = Some(command),
-            None => {
-                if let Err(err) = self.get_command() {
-                    match err.downcast::<ReadlineError>() {
-                        Ok(rl_err) => match rl_err {
-                            ReadlineError::Eof => {
-                                // EOF/Ctrl+D ==> exit
-                                self.exit = true;
-                                return Ok(());
-                            }
-                            ReadlineError::Interrupted => return Ok(()), // Ctrl + C ==> next command
-                            _ => return Err(rl_err.into()),
-                        },
-                        Err(err) => {
-                            println!("Error command: {err}");
-                            return Ok(());
-                        }
-                    };
-                }
-            }
+    pub fn step(&mut self, command: Option<(Command, String)>) -> Result<(), AppError> {
+        let command = match command {
+            Some(_) => command,
+            None => match self.input.get_command() {
+                Ok(command) => command,
+                Err(InputError::Parse(ParseError::Empty)) => None,
+                Err(err) => return Err(err.into()),
+            },
+        };
+        let (command, command_str) = match command {
+            Some(c) => (Some(c.0), Some(c.1)),
+            None => (None, None),
+        };
+        let mut ctx = self.context.write().unwrap();
+        ctx.set_command(command);
+
+        if ctx.need_echo() {
+            println!("{}{}", ctx.get_prompt(), command_str.unwrap_or_default());
         }
 
-        if self.states.command.is_none() {
+        let command = ctx.get_command();
+        if command.is_none() {
             return Ok(());
         }
 
-        let command = self.states.command.as_ref().unwrap();
+        let command = command.as_ref().unwrap();
+        if command.need_connection() && ctx.get_connection().is_none() {
+            println!("Not connected!");
+            return Ok(());
+        }
+
         match command {
-            Command::Connection {
-                host,
-                port,
-                username,
-                password,
-            } => {
-                match self.connect(host.clone(), *port, username.clone(), password.clone()) {
-                    Ok(_) => println!("Connected!"),
-                    Err(err) => println!("Failed to connect: \n{err}"),
+            Command::Internal(internal) => match internal {
+                InternalCommand::Connect(command::Connection {
+                    host,
+                    port,
+                    username,
+                    password,
+                }) => {
+                    match self.connect(host.clone(), *port, username.clone(), password.clone()) {
+                        Ok((conn, prompt)) => {
+                            ctx.set_connection(Some(conn));
+                            ctx.set_prompt(prompt);
+                            println!("Connected!");
+                        }
+                        Err(err) => {
+                            ctx.set_connection(None);
+                            println!("Failed to connect: ");
+                            self.print_execute_sql_error(err)?;
+                        }
+                    }
+                    Ok(())
                 }
-                return Ok(());
+                InternalCommand::Describe(table_or_view) => self.execute_sql_and_show(
+                    ctx.get_connection().as_ref().unwrap(),
+                    &format!("select * from {table_or_view} where 1=2"),
+                    Some(internal),
+                ),
+            },
+            Command::SQL(sql) => {
+                if sql.lines().count() == 1 && sql.starts_with("--") {
+                    // comment
+                    return Ok(());
+                }
+                let sql = if sql.is_empty() || !sql.ends_with([';', '/']) {
+                    sql
+                } else {
+                    // trim trailing ';' for statement
+                    //               '/' for block
+                    &sql[..sql.len() - 1]
+                };
+                self.execute_sql_and_show(ctx.get_connection().as_ref().unwrap(), sql, None)
             }
             Command::Shell(shell) => {
                 std::process::Command::new("sh")
@@ -117,64 +151,115 @@ impl App {
                     .stderr(Stdio::inherit())
                     .spawn()?
                     .wait()?;
-                return Ok(());
+                Ok(())
             }
-            _ => {}
         }
+    }
 
-        match self.connection.borrow().as_ref() {
-            Some(connection) => {
-                let result = self.execute_command(connection, command);
-                match result {
-                    Ok(Some(result)) => match self.show_result(result, command) {
-                        Ok(_) => {}
-                        Err(err) => println!("{err}"),
-                    },
-                    Ok(None) => {} // comment
-                    Err(err) => println!("{err}"),
+    fn print_execute_sql_error(&self, err: Error) -> Result<(), AppError> {
+        match err {
+            Error::YasClient(err) => match err.pos {
+                (0, 0) => {
+                    let DiagInfo {
+                        message,
+                        sql_state,
+                        code,
+                        ..
+                    } = err;
+                    println!(
+                        "{}",
+                        format!("YAS-{code:0>5}: {message} (SQL State: {sql_state})").red()
+                    )
                 }
-            }
-            None => {
-                println!("Not connected!");
-            }
-        }
+                (line, column) => match &err.sql {
+                    Some(sql) => {
+                        if sql.is_empty() {
+                            println!("{}", err.message.red());
+                            return Ok(());
+                        }
+                        let mut lines = vec![];
 
+                        let heading = format!("  {line} | ");
+                        lines.push(format!(
+                            "{heading}{code}",
+                            heading = heading.blue(),
+                            code = {
+                                let ps = SyntaxSet::load_defaults_newlines();
+                                let ts = ThemeSet::load_defaults();
+
+                                let syntax = ps.find_syntax_by_extension("sql").unwrap();
+                                let mut h =
+                                    HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+                                let ranges: Vec<(syntect::highlighting::Style, &str)> = h
+                                    .highlight_line(
+                                        sql.lines().nth(line as usize - 1).unwrap(),
+                                        &ps,
+                                    )
+                                    .unwrap();
+                                let mut escaped = as_24_bit_terminal_escaped(&ranges[..], false);
+                                escaped.push_str("\x1b[0m");
+                                escaped
+                            }
+                        ));
+                        lines.push(
+                            format!(
+                                "{indent}^ {message}",
+                                indent = " ".repeat(heading.len() + column as usize - 1),
+                                message = err.message
+                            )
+                            .red()
+                            .to_string(),
+                        );
+                        println!("{}", lines.join("\n"))
+                    }
+                    None => println!("{:?}", err),
+                },
+            },
+            Error::Other => todo!(),
+        }
         Ok(())
     }
 
-    fn show_result(&self, result: LazyExecuted, command: &Command) -> anyhow::Result<()> {
+    fn show_result(
+        &self,
+        result: LazyExecuted,
+        command: Option<&InternalCommand>,
+    ) -> Result<(), AppError> {
         let resolved = result.resolve()?;
         match resolved {
             Executed::DQL(result) => {
                 let columns = result.iter_columns().collect::<Vec<_>>();
-                let (mut table, styling, rows) = if matches!(command, Command::Describe(_)) {
-                    let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|_: &mut Table| {});
-                    (Table::new(columns.iter().map(ColumnWrapper)), styling, None)
-                } else {
-                    let mut builder = tabled::builder::Builder::default();
-                    let mut nulls = Vec::<(usize, usize)>::new();
-                    let rows = result.rows().collect::<Vec<_>>();
-                    rows.iter().enumerate().for_each(|(y, row)| {
-                        builder.push_record(row.iter().enumerate().map(|(x, value)| match value {
-                            Some(x) => format!("{x}"),
-                            None => {
-                                nulls.push((y, x));
-                                "<null>".to_owned()
-                            }
-                        }));
-                    });
-                    builder.insert_record(0, columns.iter().map(|x| x.name.clone()));
+                let (mut table, styling, rows) =
+                    if matches!(command, Some(InternalCommand::Describe(_))) {
+                        let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|_: &mut Table| {});
+                        (Table::new(columns.iter().map(ColumnWrapper)), styling, None)
+                    } else {
+                        let mut builder = tabled::builder::Builder::default();
+                        let mut nulls = Vec::<(usize, usize)>::new();
+                        let rows = result.rows().collect::<Vec<_>>();
+                        rows.iter().enumerate().for_each(|(y, row)| {
+                            builder.push_record(row.iter().enumerate().map(
+                                |(x, value)| match value {
+                                    Some(x) => format!("{x}"),
+                                    None => {
+                                        nulls.push((y, x));
+                                        "<null>".to_owned()
+                                    }
+                                },
+                            ));
+                        });
+                        builder.insert_record(0, columns.iter().map(|x| x.name.clone()));
 
-                    let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|table: &mut Table| {
-                        for (row, col) in nulls {
-                            let _ = &table.with(
-                                Modify::new(TableCell::new(row + 1, col))
-                                    .with(Format::content(|x| x.to_owned().italic().to_string())),
-                            );
-                        }
-                    });
-                    (builder.build(), styling, Some(rows.len()))
-                };
+                        let styling: Box<dyn FnOnce(&mut Table)> = Box::new(|table: &mut Table| {
+                            for (row, col) in nulls {
+                                let _ =
+                                    &table.with(Modify::new(TableCell::new(row + 1, col)).with(
+                                        Format::content(|x| x.to_owned().italic().to_string()),
+                                    ));
+                            }
+                        });
+                        (builder.build(), styling, Some(rows.len()))
+                    };
 
                 if rows.is_none() || matches!(rows, Some(row) if row > 0) {
                     let table = table.with(Style::rounded());
@@ -187,9 +272,7 @@ impl App {
                     println!("{rows} row(s) fetched");
                 }
             }
-            Executed::DML(affection) => {
-                println!("{} row(s) affected", affection.affected())
-            }
+            Executed::DML(affection) => println!("{} row(s) affected", affection.affected()),
             Executed::DCL(_instruction) => println!("DCL executed"),
             Executed::Unknown(_) => println!("Succeed"),
         };
@@ -217,20 +300,13 @@ impl App {
         }
     }
 
-    fn get_prompt(&self) -> String {
-        match self.connection.borrow().as_ref() {
-            Some(_) => self.prompt_conn.clone().green().to_string(),
-            None => "SQL > ".to_owned(),
-        }
-    }
-
     fn connect(
-        &mut self,
+        &self,
         host: Option<String>,
         port: Option<u16>,
         username: Option<String>,
         password: Option<String>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(Connection, String), Error> {
         let host = match host {
             Some(v) => v,
             None => "127.0.0.1".to_owned(),
@@ -238,88 +314,38 @@ impl App {
         let port = port.unwrap_or(1688);
         let username = match username {
             Some(v) => v.clone(),
-            None => self.normal_input("Username: ")?,
+            None => self.input.line("Username: ").unwrap_or_default(),
         };
         let password = match password {
             Some(v) => v.clone(),
-            None => self.normal_input("Password: ")?,
+            None => self.input.line("Password: ").unwrap_or_default(),
         };
         match Connection::connect(&host, port, &username, &password) {
-            Ok(conn) => {
-                self.prompt_conn = format!("{username}@{host}:{port} > ");
-                self.connection.replace(Some(conn))
-            }
-            Err(err) => {
-                self.connection.replace(None);
-                return Err(err.into());
-            }
-        };
-        Ok(())
+            Ok(conn) => Ok((conn, format!("{username}@{host}:{port} > "))),
+            Err(err) => Err(err),
+        }
     }
 
-    fn normal_input(&mut self, prompt: &str) -> Result<String, ReadlineError> {
-        self.rl.helper_mut().unwrap().disable_validation();
-        let input = self.rl.readline(prompt);
-        self.rl.helper_mut().unwrap().enable_validation();
-        input
+    fn execute_sql(&self, connection: &Connection, sql: &str) -> Result<LazyExecuted, Error> {
+        let statement = connection.create_statement()?;
+        let result = statement.execute_sql(sql)?;
+        Ok(result)
     }
 
-    fn parse_command(input: &str) -> anyhow::Result<Option<Command>> {
-        let command = if input.is_empty() {
-            None
-        } else if let Some(stripped) = input.strip_prefix('!') {
-            Some(Command::Shell(stripped.to_owned()))
-        } else if let Some(table_or_view) = input.strip_prefix("desc ") {
-            Some(Command::Describe(table_or_view.to_owned()))
-        } else if let Some(conn) = input.strip_prefix("conn ") {
-            Some(parse_connection_string(conn)?)
-        } else {
-            Some(Command::SQL(input.to_owned()))
-        };
-        Ok(command)
-    }
-
-    fn get_command(&mut self) -> anyhow::Result<()> {
-        let input = self.rl.readline(&self.get_prompt())?;
-        self.states.command = App::parse_command(&input)?;
-
-        Ok(())
-    }
-
-    fn execute_command(
+    fn execute_sql_and_show(
         &self,
         connection: &Connection,
-        command: &Command,
-    ) -> anyhow::Result<Option<LazyExecuted>> {
-        let statement = connection.create_statement()?;
-
-        let sql = match command {
-            Command::SQL(sql) => {
-                if sql.lines().count() == 1 && sql.starts_with("--") {
-                    return Ok(None);
-                }
-                if sql.is_empty() || !sql.ends_with([';', '/']) {
-                    sql.to_owned()
-                } else {
-                    // trim trailing ';' for statement
-                    //               '/' for block
-                    sql[..sql.len() - 1].to_owned()
-                }
-            }
-            Command::Describe(table_or_view) => format!(
-                "select * from {table_or_view} where 1=2",
-                table_or_view = &table_or_view[..(max(table_or_view.len() - 1, 0))]
-            ),
-            Command::Connection { .. } => unreachable!("Connecting should be processed before."),
-            Command::Shell(_) => unreachable!("Shell command should be processed before."),
-        };
-        let result = statement.execute_sql(&sql)?;
-        Ok(Some(result))
-    }
-}
-
-impl Drop for App {
-    fn drop(&mut self) {
-        let _ = self.rl.append_history(HISTORY_FILE);
+        sql: &str,
+        command: Option<&InternalCommand>,
+    ) -> Result<(), AppError> {
+        let result = self.execute_sql(connection, sql);
+        match result {
+            Ok(result) => match self.show_result(result, command) {
+                Ok(_) => {}
+                Err(err) => println!("{err}"),
+            },
+            Err(err) => self.print_execute_sql_error(err)?,
+        }
+        Ok(())
     }
 }
