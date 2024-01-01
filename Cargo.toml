@@ -2,7 +2,7 @@
 name = "yasqlplus"
 authors = ["SalHe <salhe@qq.com>"]
 description = "YaSQL+ is an alternative for yasql."
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
@@ -15,7 +15,7 @@ colored = "2.1.0"
 console = "0.15.7"
 rustyline = { version = "13.0.0", features = ["derive"] }
 syntect = "5.1.0"
-tabled = { version = "0.14.0", features = ["color"] }
+tabled = { version = "0.15.0", features = ["ansi"] }
 terminal_size = "0.3.0"
 thiserror = "1.0.50"
 yasqlplus-client = { path = "./yasqlplus-client" }
