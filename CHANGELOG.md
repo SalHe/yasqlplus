@@ -2,15 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [unreleased]
+## [0.1.0] - 2024-01-01
 
 ### Bug Fixes
 
 - Multiline input
+- No styling when display in less
+- Display error
 
 ### Documentation
 
 - README.md
+- README.md
+- CHANGELOG
 - README.md
 
 ### Features
@@ -21,11 +25,32 @@ All notable changes to this project will be documented in this file.
 - Improve error tips
 - Improve sql error tips
 - Simple completion
+- No keeping duplicated history
+- Improve validation for better multiline input
+- Commands from `BufReader`
+- SQL scripts file and support disable echo #5 #4
+- #4 single SQL execute
+
+### Refactor
+
+- Extract client as single library
+- Extract commands to mod
+- Classify commands
+- Extract validation/parsing for commands
+- Input source
+- Optimize executing command
+- Return error of fetching command
+- Make trait `Output`
+- Remove `--output` argument
 
 ### Styling
 
 - Fmt
 - Fmt clean
+
+### Build
+
+- Update `tabled` to 0.15.0
 
 ## [0.0.1] - 2023-12-13
 
