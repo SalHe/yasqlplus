@@ -17,7 +17,7 @@ use crate::command::{self, Command, InternalCommand};
 
 use self::{
     context::Context,
-    input::{InputError, InputSource},
+    input::{Input, InputError},
     output::Output,
     table::ColumnWrapper,
 };
@@ -34,7 +34,7 @@ pub mod output;
 
 pub struct App {
     context: Rc<RwLock<Context>>,
-    input: Box<dyn InputSource>,
+    input: Box<dyn Input>,
     output: RefCell<Box<dyn Output>>,
 }
 
@@ -52,7 +52,7 @@ pub enum AppError {
 
 impl App {
     pub fn new(
-        input: Box<dyn InputSource>,
+        input: Box<dyn Input>,
         output: Box<dyn Output>,
         context: Rc<RwLock<Context>>,
     ) -> Result<Self, AppError> {
@@ -80,13 +80,26 @@ impl App {
         Ok(())
     }
 
-    pub fn step(&mut self, command: Option<Command>) -> Result<(), AppError> {
+    pub fn step(&mut self, command: Option<(Command, String)>) -> Result<(), AppError> {
         let command = match command {
             Some(_) => command,
             None => self.input.get_command()?,
         };
+        let (command, command_str) = match command {
+            Some(c) => (Some(c.0), Some(c.1)),
+            None => (None, None),
+        };
         let mut ctx = self.context.write().unwrap();
         ctx.set_command(command);
+
+        if self.input.need_echo() {
+            writeln!(
+                self.output.borrow_mut(),
+                "{}{}",
+                ctx.get_prompt(),
+                command_str.unwrap_or_default()
+            )?;
+        }
 
         let command = ctx.get_command();
         if command.is_none() {
@@ -284,7 +297,7 @@ impl App {
     }
 
     fn show_long_if_necessary(&self, content: &str) {
-        if !console::Term::stdout().is_term() {
+        if !self.output.borrow().is_terminal() {
             return;
         }
         let size = terminal_size();

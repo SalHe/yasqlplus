@@ -8,7 +8,7 @@ use crate::command::{parse_command, Command, ParseError};
 
 use crate::app::{context::Context, helper::YspHelper};
 
-use super::{InputError, InputSource};
+use super::{Input, InputError, InputSettings};
 
 const HISTORY_FILE: &str = "yasqlplus-history.txt";
 
@@ -37,14 +37,20 @@ impl ShellInput {
     }
 }
 
-impl InputSource for ShellInput {
-    fn get_command(&self) -> Result<Option<Command>, InputError> {
+impl InputSettings for ShellInput {
+    fn need_echo(&self) -> bool {
+        false
+    }
+}
+
+impl Input for ShellInput {
+    fn get_command(&self) -> Result<Option<(Command, String)>, InputError> {
         let input = self
             .rl
             .borrow_mut()
             .readline(&self.context.read().unwrap().get_prompt())?;
         let command = match parse_command(&input) {
-            Ok(command) => Some(command),
+            Ok(command) => Some((command, input)),
             Err(ParseError::Empty) => None,
             Err(err) => return Err(err.into()),
         };
