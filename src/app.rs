@@ -1,4 +1,4 @@
-use std::{cell::RefCell, io::Write, process::Stdio, rc::Rc, sync::RwLock};
+use std::{io::Write, process::Stdio, rc::Rc, sync::RwLock};
 
 use colored::Colorize;
 
@@ -18,7 +18,6 @@ use crate::command::{self, Command, InternalCommand, ParseError};
 use self::{
     context::Context,
     input::{Input, InputError},
-    output::Output,
     table::ColumnWrapper,
 };
 
@@ -30,12 +29,10 @@ mod validate;
 
 pub mod context;
 pub mod input;
-pub mod output;
 
 pub struct App {
     context: Rc<RwLock<Context>>,
     input: Box<dyn Input>,
-    output: RefCell<Box<dyn Output>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -51,16 +48,8 @@ pub enum AppError {
 }
 
 impl App {
-    pub fn new(
-        input: Box<dyn Input>,
-        output: Box<dyn Output>,
-        context: Rc<RwLock<Context>>,
-    ) -> Result<Self, AppError> {
-        Ok(App {
-            input,
-            context,
-            output: RefCell::new(output),
-        })
+    pub fn new(input: Box<dyn Input>, context: Rc<RwLock<Context>>) -> Result<Self, AppError> {
+        Ok(App { input, context })
     }
 
     pub fn run(&mut self) -> Result<(), AppError> {
@@ -70,9 +59,9 @@ impl App {
                     AppError::Input(input_error) => match input_error {
                         InputError::Eof => break,
                         InputError::Cancelled => {}
-                        _ => writeln!(self.output.borrow_mut(), "{input_error}")?,
+                        _ => println!("{input_error}"),
                     },
-                    AppError::Io(err) => writeln!(self.output.borrow_mut(), "{err}")?,
+                    AppError::Io(err) => println!("{err}"),
                     AppError::Client(err) => self.print_execute_sql_error(err)?,
                 }
             }
@@ -97,12 +86,7 @@ impl App {
         ctx.set_command(command);
 
         if self.input.need_echo() {
-            writeln!(
-                self.output.borrow_mut(),
-                "{}{}",
-                ctx.get_prompt(),
-                command_str.unwrap_or_default()
-            )?;
+            println!("{}{}", ctx.get_prompt(), command_str.unwrap_or_default());
         }
 
         let command = ctx.get_command();
@@ -112,7 +96,7 @@ impl App {
 
         let command = command.as_ref().unwrap();
         if command.need_connection() && ctx.get_connection().is_none() {
-            writeln!(self.output.borrow_mut(), "Not connected!")?;
+            println!("Not connected!");
             return Ok(());
         }
 
@@ -128,11 +112,11 @@ impl App {
                         Ok((conn, prompt)) => {
                             ctx.set_connection(Some(conn));
                             ctx.set_prompt(prompt);
-                            writeln!(self.output.borrow_mut(), "Connected!")?;
+                            println!("Connected!");
                         }
                         Err(err) => {
                             ctx.set_connection(None);
-                            writeln!(self.output.borrow_mut(), "Failed to connect: ")?;
+                            println!("Failed to connect: ");
                             self.print_execute_sql_error(err)?;
                         }
                     }
@@ -182,17 +166,16 @@ impl App {
                         code,
                         ..
                     } = err;
-                    writeln!(
-                        self.output.borrow_mut(),
+                    println!(
                         "{}",
                         format!("YAS-{code:0>5}: {message} (SQL State: {sql_state})").red()
-                    )?
+                    )
                 }
                 (line, column) => match &err.sql {
                     Some(sql) => {
                         if sql.is_empty() {
-                            return writeln!(self.output.borrow_mut(), "{}", err.message.red())
-                                .map_err(Into::into);
+                            println!("{}", err.message.red());
+                            return Ok(());
                         }
                         let mut lines = vec![];
 
@@ -227,9 +210,9 @@ impl App {
                             .red()
                             .to_string(),
                         );
-                        writeln!(self.output.borrow_mut(), "{}", lines.join("\n"))?
+                        println!("{}", lines.join("\n"))
                     }
-                    None => writeln!(self.output.borrow_mut(), "{:?}", err)?,
+                    None => println!("{:?}", err),
                 },
             },
             Error::Other => todo!(),
@@ -282,26 +265,22 @@ impl App {
                     let table = table.with(Style::rounded());
                     self.show_long_if_necessary(&table.to_string());
                     styling(table);
-                    writeln!(self.output.borrow_mut(), "{table}")?;
+                    println!("{table}");
                 }
 
                 if let Some(rows) = rows {
-                    writeln!(self.output.borrow_mut(), "{rows} row(s) fetched")?;
+                    println!("{rows} row(s) fetched");
                 }
             }
-            Executed::DML(affection) => writeln!(
-                self.output.borrow_mut(),
-                "{} row(s) affected",
-                affection.affected()
-            )?,
-            Executed::DCL(_instruction) => writeln!(self.output.borrow_mut(), "DCL executed")?,
-            Executed::Unknown(_) => writeln!(self.output.borrow_mut(), "Succeed")?,
+            Executed::DML(affection) => println!("{} row(s) affected", affection.affected()),
+            Executed::DCL(_instruction) => println!("DCL executed"),
+            Executed::Unknown(_) => println!("Succeed"),
         };
         Ok(())
     }
 
     fn show_long_if_necessary(&self, content: &str) {
-        if !self.output.borrow().is_terminal() {
+        if !console::Term::stdout().is_term() {
             return;
         }
         let size = terminal_size();
@@ -363,7 +342,7 @@ impl App {
         match result {
             Ok(result) => match self.show_result(result, command) {
                 Ok(_) => {}
-                Err(err) => writeln!(self.output.borrow_mut(), "{err}")?,
+                Err(err) => println!("{err}"),
             },
             Err(err) => self.print_execute_sql_error(err)?,
         }

@@ -2,3 +2,5 @@
 yas-client
 yasqlplus-history.txt
 .env.dev
+test.sql
+test.out

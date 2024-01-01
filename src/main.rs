@@ -3,7 +3,6 @@ use std::{fs::File, io::BufReader, rc::Rc, sync::RwLock};
 use app::{
     context::Context,
     input::{BufReaderInput, Input, ShellInput},
-    output::Output,
     AppError,
 };
 use clap::Parser;
@@ -53,18 +52,14 @@ struct Cli {
 
     /// SQL scripts file.
     #[arg(short, long)]
-    input: Option<String>,
-
-    /// Result output file.
-    #[arg(short, long)]
-    output: Option<String>,
+    file: Option<String>,
 }
 
 fn main() -> Result<(), AppError> {
     let args = Cli::parse();
 
     let ctx = Rc::new(RwLock::new(Context::default()));
-    let input: Box<dyn Input> = match args.input {
+    let input: Box<dyn Input> = match args.file {
         // TODO support network file(e.g. http/https)
         Some(input) => Box::new(BufReaderInput::new(
             BufReader::new(File::open(input)?),
@@ -72,12 +67,7 @@ fn main() -> Result<(), AppError> {
         )),
         None => Box::new(ShellInput::new(ctx.clone())?),
     };
-    let output: Box<dyn Output> = match args.output {
-        Some(output) => Box::new(File::create(output)?),
-        None => Box::new(std::io::stdout()),
-    };
-
-    let mut app = app::App::new(input, output, ctx)?;
+    let mut app = app::App::new(input, ctx)?;
 
     // Parse connection string.
     let conn_str = args.conn.first().cloned().unwrap_or_default();
