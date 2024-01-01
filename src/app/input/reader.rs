@@ -8,20 +8,22 @@ use crate::command::{parse_command, Command, ParseError};
 use super::{Input, InputError, InputSettings};
 
 pub struct BufReaderInput<R: ?Sized + Read> {
+    need_echo: bool,
     reader: RefCell<BufReader<R>>,
 }
 
 impl<R: Read> BufReaderInput<R> {
-    // pub fn new(reader: BufReader<R>) -> Self {
-    //     Self {
-    //         reader: RefCell::new(reader),
-    //     }
-    // }
+    pub fn new(reader: BufReader<R>, need_echo: bool) -> Self {
+        Self {
+            reader: RefCell::new(reader),
+            need_echo,
+        }
+    }
 }
 
 impl<R: Read> InputSettings for BufReaderInput<R> {
     fn need_echo(&self) -> bool {
-        true
+        self.need_echo
     }
 }
 

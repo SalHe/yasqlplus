@@ -2,11 +2,21 @@ use std::num::ParseIntError;
 
 use thiserror::Error;
 
+#[derive(Debug, Default)]
 pub struct Connection {
     pub host: Option<String>,
     pub port: Option<u16>,
     pub username: Option<String>,
     pub password: Option<String>,
+}
+
+impl Connection {
+    pub fn any_valid(&self) -> bool {
+        self.host.is_some()
+            || self.port.is_some()
+            || self.username.is_some()
+            || self.password.is_some()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

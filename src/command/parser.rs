@@ -43,7 +43,7 @@ pub fn parse_internal_command(command: &str) -> Option<Result<Command, ParseErro
 
 pub fn parse_command(command: &str) -> Result<Command, ParseError> {
     if command.is_empty() {
-        Err(ParseError::Empty)
+        Err(ParseError::Empty) // TODO should be an error? or a empty command
     } else if let Some(shell) = command.strip_prefix('!') {
         Ok(Command::Shell(shell.to_string()))
     } else if let Some(table_or_view) = parse_internal_command(command) {

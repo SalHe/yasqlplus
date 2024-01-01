@@ -1,5 +1,7 @@
 [package]
 name = "yasqlplus"
+authors = ["SalHe <salhe@qq.com>"]
+description = "YaSQL+ is an alternative for yasql."
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
@@ -8,6 +10,7 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1.0.75"
+clap = { version = "4.4.12", features = ["derive"] }
 colored = "2.1.0"
 console = "0.15.7"
 rustyline = { version = "13.0.0", features = ["derive"] }

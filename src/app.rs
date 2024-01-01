@@ -13,7 +13,7 @@ use tabled::{
 use terminal_size::{terminal_size, Height, Width};
 use yasqlplus_client::wrapper::{Connection, DiagInfo, Error, Executed, LazyExecuted};
 
-use crate::command::{self, Command, InternalCommand};
+use crate::command::{self, Command, InternalCommand, ParseError};
 
 use self::{
     context::Context,
@@ -83,7 +83,11 @@ impl App {
     pub fn step(&mut self, command: Option<(Command, String)>) -> Result<(), AppError> {
         let command = match command {
             Some(_) => command,
-            None => self.input.get_command()?,
+            None => match self.input.get_command() {
+                Ok(command) => command,
+                Err(InputError::Parse(ParseError::Empty)) => None,
+                Err(err) => return Err(err.into()),
+            },
         };
         let (command, command_str) = match command {
             Some(c) => (Some(c.0), Some(c.1)),
