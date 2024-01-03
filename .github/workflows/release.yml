@@ -2,39 +2,118 @@ name: release
 
 on:
   push:
-    # Sequence of patterns matched against refs/tags
     tags:
-      - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
+      - "v*"
 
 jobs:
-  build:
-    name: Upload Release Asset
+  create-release:
+    name: create-release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@master
+      - uses: actions/checkout@v4
+      - name: Get the release version from the tag
+        if: env.VERSION == ''
+        run: echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+      - name: Show the version
+        run: |
+          echo "version is: $VERSION"
+      - name: Check that tag version and Cargo.toml version are the same
+        shell: bash
+        run: |
+          if ! grep -q "version = \"${VERSION:1}\"" Cargo.toml; then
+            echo "version does not match Cargo.toml" >&2
+            exit 1
+          fi
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create $VERSION --draft --verify-tag --title $VERSION
+    outputs:
+      version: ${{ env.VERSION }}
+
+  build:
+    needs: ['create-release']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
       - name: Download Dependencies
         run: ./scripts/download-dependency.sh
       - name: Build project
         run: |
           cargo build --release
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1.0.0
+      - name: Upload release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp ./target/release/yasqlplus yasqlplus-linux-x86_64
+          version="${{ needs.create-release.outputs.version }}"
+          gh release upload "$version" yasqlplus-linux-x86_64
+
+  build-compatible:
+    needs: ['create-release']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build Docker image
+        uses: docker/build-push-action@v2
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-      - name: Upload Release Asset
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1.0.1
+          context: .
+          file: ./scripts/ci-release.Dockerfile
+          push: false
+          tags: bysp:latest
+
+      - name: Run Docker container
+        run: |
+            docker run --name bysp bysp:latest
+            docker cp bysp:/yasqlplus/target/release/yasqlplus ./yasqlplus-linux-compatible-x86_64
+      - name: Upload release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.create-release.outputs.version }}"
+          gh release upload "$version" yasqlplus-linux-compatible-x86_64
+
+  build-compatible-aarch64:
+    needs: ['create-release']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: uraimo/run-on-arch-action@v2
+        name: Build aarch64
+        id: runcmd
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-          asset_path: ./target/release/yasqlplus
-          asset_name: yasqlplus-linux-amd64
-          asset_content_type: application/octet-stream
+            arch: aarch64
+            distro: ubuntu18.04
+            githubToken: ${{ github.token }}
+            setup: |
+              mkdir -p "${PWD}/artifacts"
+            # Mount the artifacts directory as /artifacts in the container
+            dockerRunArgs: |
+              --volume "${PWD}/artifacts:/artifacts"
+            run: |
+                # Add Docker's official GPG key:
+                apt-get update
+                apt-get install -y ca-certificates curl gnupg
+                install -m 0755 -d /etc/apt/keyrings
+                curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                chmod a+r /etc/apt/keyrings/docker.gpg
+
+                # Add the repository to Apt sources:
+                echo \
+                  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+                  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+                  tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+                apt-get update
+
+                apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+                docker build -t bysp:latest -f ./scripts/ci-release.Dockerfile .
+                docker run --name bysp bysp:latest
+                docker cp bysp:/yasqlplus/target/release/yasqlplus /artifacts/yasqlplus-linux-compatible-aarch64
+      - name: Upload release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ needs.create-release.outputs.version }}"
+          gh release upload "$version" ./artifacts/yasqlplus-linux-compatible-aarch64
