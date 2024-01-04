@@ -6,10 +6,8 @@ cat >>/etc/ld.so.conf <<EOF
 /usr/lib64/clang-private
 EOF
 
-cat /etc/ld.so.conf
-
 source /opt/rh/devtoolset-7/enable
-source /opt/rh/llvm-toolset-7/enable
+source /opt/rh/llvm-toolset-7.0/enable
 source "$HOME/.cargo/env"
 
 ldconfig

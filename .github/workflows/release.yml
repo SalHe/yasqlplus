@@ -61,10 +61,13 @@ jobs:
           file: ./scripts/ci-release.Dockerfile
           push: false
           tags: bysp:latest
+          build-args: |
+            os_image=centos:centos7
 
       - name: Run Docker container
         run: |
-            docker run --name bysp bysp:latest
+            docker run -itd -v "${PWD}:/yasqlplus" --name bysp bysp:latest
+            docker exec bysp /yasqlplus/scripts/ci-release-build.sh
             docker cp bysp:/yasqlplus/target/release/yasqlplus ./yasqlplus-linux-compatible-x86_64
       - name: Upload release
         env:
@@ -108,8 +111,9 @@ jobs:
 
                 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-                docker build -t bysp:latest -f ./scripts/ci-release.Dockerfile .
-                docker run --name bysp bysp:latest
+                docker build --build-arg=os_image=arm64v8/centos:centos7 -t bysp:latest -f ./scripts/ci-release.Dockerfile .
+                docker run -itd -v "${PWD}:/yasqlplus" --name bysp bysp:latest
+                docker exec bysp /yasqlplus/scripts/ci-release-build.sh
                 docker cp bysp:/yasqlplus/target/release/yasqlplus /artifacts/yasqlplus-linux-compatible-aarch64
       - name: Upload release
         env:
