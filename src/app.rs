@@ -126,6 +126,7 @@ impl App {
                     ctx.get_connection().as_ref().unwrap(),
                     &format!("select * from {table_or_view} where 1=2"),
                     Some(internal),
+                    ctx.less_enabled(),
                 ),
             },
             Command::SQL(sql) => {
@@ -140,7 +141,12 @@ impl App {
                     //               '/' for block
                     &sql[..sql.len() - 1]
                 };
-                self.execute_sql_and_show(ctx.get_connection().as_ref().unwrap(), sql, None)
+                self.execute_sql_and_show(
+                    ctx.get_connection().as_ref().unwrap(),
+                    sql,
+                    None,
+                    ctx.less_enabled(),
+                )
             }
             Command::Shell(shell) => {
                 std::process::Command::new("sh")
@@ -224,6 +230,7 @@ impl App {
         &self,
         result: LazyExecuted,
         command: Option<&InternalCommand>,
+        less_enabled: bool,
     ) -> Result<(), AppError> {
         let resolved = result.resolve()?;
         match resolved {
@@ -263,7 +270,9 @@ impl App {
 
                 if rows.is_none() || matches!(rows, Some(row) if row > 0) {
                     let table = table.with(Style::rounded());
-                    self.show_long_if_necessary(&table.to_string());
+                    if less_enabled {
+                        self.show_long_if_necessary(&table.to_string());
+                    }
                     styling(table);
                     println!("{table}");
                 }
@@ -337,10 +346,11 @@ impl App {
         connection: &Connection,
         sql: &str,
         command: Option<&InternalCommand>,
+        less_enabled: bool,
     ) -> Result<(), AppError> {
         let result = self.execute_sql(connection, sql);
         match result {
-            Ok(result) => match self.show_result(result, command) {
+            Ok(result) => match self.show_result(result, command, less_enabled) {
                 Ok(_) => {}
                 Err(err) => println!("{err}"),
             },

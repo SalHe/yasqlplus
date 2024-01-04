@@ -57,6 +57,9 @@ struct Cli {
     /// Single command.
     #[arg(short, long)]
     command: Option<String>,
+
+    #[arg(long)]
+    no_less: bool,
 }
 
 fn main() -> Result<(), AppError> {
@@ -64,6 +67,7 @@ fn main() -> Result<(), AppError> {
 
     let mut ctx = Context::default();
     ctx.set_need_echo(args.echo);
+    ctx.set_less_enabled(!args.no_less);
 
     let ctx = Rc::new(RwLock::new(ctx));
     let input: Box<dyn Input> = match args.command {

@@ -9,6 +9,7 @@ pub struct Context {
     prompt_conn: String,
     last_command: Option<Command>,
     need_echo: bool,
+    less_enabled: bool,
 }
 
 impl Context {
@@ -46,5 +47,13 @@ impl Context {
 
     pub fn set_need_echo(&mut self, need_echo: bool) {
         self.need_echo = need_echo;
+    }
+
+    pub fn less_enabled(&self) -> bool {
+        self.less_enabled
+    }
+
+    pub fn set_less_enabled(&mut self, less_enabled: bool) {
+        self.less_enabled = less_enabled;
     }
 }
