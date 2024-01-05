@@ -96,7 +96,16 @@ impl App {
 
         let command = command.as_ref().unwrap();
         if command.need_connection() && ctx.get_connection().is_none() {
-            println!("Not connected!");
+            match command {
+                Command::SQL(sql)
+                    if (sql
+                        .lines()
+                        .nth(0)
+                        .map(|l| l.starts_with("--"))
+                        .unwrap_or(false)) => {} // single line comment
+                _ => println!("Not connected!"),
+            }
+
             return Ok(());
         }
 
