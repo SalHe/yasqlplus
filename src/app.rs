@@ -137,6 +137,7 @@ impl App {
                     Some(internal),
                     ctx.less_enabled(),
                 ),
+                InternalCommand::Exit => Err(AppError::Input(InputError::Eof)),
             },
             Command::SQL(sql) => {
                 if sql.lines().count() == 1 && sql.starts_with("--") {

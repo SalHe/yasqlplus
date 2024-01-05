@@ -29,6 +29,8 @@ pub fn parse_internal_command(command: &str) -> Option<Result<Command, ParseErro
         } else {
             Err(ParseError::Incomplete(command.to_string()))
         })
+    } else if command == "exit" {
+        Some(Ok(Command::Internal(InternalCommand::Exit)))
     } else {
         command.strip_prefix("conn ").map(|conn_str| {
             parse_connection_string(conn_str)

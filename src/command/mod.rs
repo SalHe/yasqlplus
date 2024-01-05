@@ -19,6 +19,7 @@ pub enum Command {
 pub enum InternalCommand {
     Describe(String),
     Connect(Connection),
+    Exit,
 }
 
 impl Command {
@@ -29,6 +30,7 @@ impl Command {
             Command::Internal(internal) => match internal {
                 InternalCommand::Describe(_) => true,
                 InternalCommand::Connect(_) => false,
+                InternalCommand::Exit => false,
             },
         }
     }
