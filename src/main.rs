@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufReader, rc::Rc, sync::RwLock};
+use std::{fs::File, io::BufReader, path::PathBuf, rc::Rc, sync::RwLock};
 
 use app::{
     context::Context,
@@ -16,10 +16,10 @@ mod command;
 struct Cli {
     /// Connection string.
     ///
-    ///     [<username>]/[<password>][@[<host>]:[<port>]]
+    ///     [<username>][/[<password>][@[<host>][:[<port>]]]]
     ///
-    /// <host> will defaults to `127.0.0.1`.
-    /// <port> will defaults to `1688`.
+    /// <host> will default to `127.0.0.1`.
+    /// <port> will default to `1688`.
     ///
     /// Leave <username> or <password> empty for inputting from next line.
     /// To specify complex username/password you could leave them empty.
@@ -28,6 +28,7 @@ struct Cli {
     /// For example:
     ///     sys/yasdb_123@127.0.0.1:1688
     ///     sys/yasdb_123@:1601
+    #[arg(verbatim_doc_comment)]
     conn: Vec<String>,
 
     /// Database username.
@@ -58,8 +59,18 @@ struct Cli {
     #[arg(short, long)]
     command: Option<String>,
 
+    /// Disable show large table in less.
     #[arg(long)]
     no_less: bool,
+
+    /// History file **directory**. Default to user home.
+    /// The history file name is specified by `--history-file`.
+    #[arg(short = 'H', long)]
+    history_path: Option<String>,
+
+    /// History file name.
+    #[arg(short = 'F', long, default_value = "yasqlplus-history.txt")]
+    history_file: String,
 }
 
 fn main() -> Result<(), AppError> {
@@ -75,7 +86,16 @@ fn main() -> Result<(), AppError> {
         None => match args.file {
             // TODO support network file(e.g. http/https)
             Some(input) => Box::new(BufReaderInput::new(BufReader::new(File::open(input)?))),
-            None => Box::new(ShellInput::new(ctx.clone())?),
+            None => Box::new(ShellInput::new(
+                ctx.clone(),
+                args.history_path
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| dirs::home_dir().unwrap_or_default())
+                    .join(args.history_file)
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+            )?),
         },
     };
     let mut app = app::App::new(input, ctx)?;

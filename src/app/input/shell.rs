@@ -10,15 +10,14 @@ use crate::app::{context::Context, helper::YspHelper};
 
 use super::{Input, InputError};
 
-const HISTORY_FILE: &str = "yasqlplus-history.txt";
-
 pub struct ShellInput {
     context: Rc<RwLock<Context>>,
     rl: RefCell<Editor<YspHelper, FileHistory>>,
+    history_file: String,
 }
 
 impl ShellInput {
-    pub fn new(context: Rc<RwLock<Context>>) -> Result<Self, InputError> {
+    pub fn new(context: Rc<RwLock<Context>>, history_file: String) -> Result<Self, InputError> {
         let config = Config::builder()
             .history_ignore_space(true)
             .completion_type(CompletionType::Circular)
@@ -29,10 +28,11 @@ impl ShellInput {
         let mut rl = Editor::with_config(config)?;
         rl.set_helper(Some(YspHelper::new(context.clone())));
         rl.bind_sequence(KeyEvent::alt('s'), EventHandler::Simple(Cmd::Newline));
-        let _ = rl.load_history(HISTORY_FILE);
+        let _ = rl.load_history(&history_file);
         Ok(Self {
             rl: RefCell::new(rl),
             context,
+            history_file,
         })
     }
 }
@@ -63,6 +63,6 @@ impl Input for ShellInput {
 
 impl Drop for ShellInput {
     fn drop(&mut self) {
-        let _ = self.rl.borrow_mut().append_history(HISTORY_FILE);
+        let _ = self.rl.borrow_mut().append_history(&self.history_file);
     }
 }

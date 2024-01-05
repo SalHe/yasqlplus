@@ -13,6 +13,7 @@ anyhow = "1.0.75"
 clap = { version = "4.4.12", features = ["derive"] }
 colored = "2.1.0"
 console = "0.15.7"
+dirs = "5.0.1"
 rustyline = { version = "13.0.0", features = ["derive"] }
 syntect = "5.1.0"
 tabled = { version = "0.15.0", features = ["ansi"] }
