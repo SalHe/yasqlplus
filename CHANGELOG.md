@@ -2,7 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.0] - 2024-01-01
+## [0.1.1] - 2024-01-05
+
+### Bug Fixes
+
+- Ignore single line comment
+- Multi line paste
+
+### Features
+
+- Disable show in less
+- Specify history file
+- Exit command
+
+### Miscellaneous Tasks
+
+- Release
+
+## [0.1.0] - 2024-01-03
 
 ### Bug Fixes
 
@@ -16,6 +33,7 @@ All notable changes to this project will be documented in this file.
 - README.md
 - CHANGELOG
 - README.md
+- CHANGELOG.md
 
 ### Features
 
@@ -30,6 +48,10 @@ All notable changes to this project will be documented in this file.
 - Commands from `BufReader`
 - SQL scripts file and support disable echo #5 #4
 - #4 single SQL execute
+
+### Miscellaneous Tasks
+
+- Release with compatible
 
 ### Refactor
 
