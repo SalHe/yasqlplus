@@ -3,6 +3,7 @@ use std::{cell::RefCell, rc::Rc, sync::RwLock};
 use rustyline::{
     history::FileHistory, Cmd, CompletionType, Config, EditMode, Editor, EventHandler, KeyEvent,
 };
+use rustyline::{KeyCode, Modifiers};
 
 use crate::command::{parse_command, Command, ParseError};
 
@@ -28,6 +29,10 @@ impl ShellInput {
         let mut rl = Editor::with_config(config)?;
         rl.set_helper(Some(YspHelper::new(context.clone())));
         rl.bind_sequence(KeyEvent::alt('s'), EventHandler::Simple(Cmd::Newline));
+        rl.bind_sequence(
+            KeyEvent(KeyCode::BracketedPasteStart, Modifiers::NONE),
+            Cmd::Noop,
+        );
         let _ = rl.load_history(&history_file);
         Ok(Self {
             rl: RefCell::new(rl),

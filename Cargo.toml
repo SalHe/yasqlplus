@@ -14,12 +14,21 @@ clap = { version = "4.4.12", features = ["derive"] }
 colored = "2.1.0"
 console = "0.15.7"
 dirs = "5.0.1"
-rustyline = { version = "13.0.0", features = ["derive"] }
 syntect = "5.1.0"
 tabled = { version = "0.15.0", features = ["ansi"] }
 terminal_size = "0.3.0"
 thiserror = "1.0.50"
 yasqlplus-client = { path = "./yasqlplus-client" }
+
+[dependencies.rustyline]
+# version = "13.0.0"
+
+# Use this branch temporarily for fixing multiline pasting.
+# Waiting for this PR merged or another fix merged.
+#   https://github.com/kkawakam/rustyline/pull/758
+git = "https://github.com/SalHe/rustyline.git"
+branch = "fix-paste-mulitiline"
+features = ["derive"]
 
 [profile.release]
 lto = true
