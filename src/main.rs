@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::BufReader,
+    io::{BufReader, IsTerminal},
     path::PathBuf,
     sync::{Arc, RwLock},
 };
@@ -99,9 +99,11 @@ fn main() -> Result<(), AppError> {
         .unwrap()
         .to_owned();
 
+    let stdin = std::io::stdin();
     let ctx = Arc::new(RwLock::new(ctx));
     let input: Box<dyn Input> = match args.command {
         Some(command) => Box::new(SingleCommand::new(command)),
+        None if !stdin.is_terminal() => Box::new(BufReaderInput::new(BufReader::new(stdin))),
         None => match args.file {
             // TODO support network file(e.g. http/https)
             Some(input) => Box::new(BufReaderInput::new(BufReader::new(File::open(input)?))),
