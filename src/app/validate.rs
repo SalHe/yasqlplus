@@ -1,23 +1,18 @@
-use rustyline::validate::{ValidationContext, ValidationResult, Validator};
+use rustyline::validate::{ValidationContext, ValidationResult};
 
 use crate::command::parse_command;
 
-pub struct YspValidator {
-    pub enabled: bool,
-}
+pub struct YspValidator;
 
-impl Validator for YspValidator {
+impl rustyline::validate::Validator for YspValidator {
     fn validate(&self, ctx: &mut ValidationContext) -> rustyline::Result<ValidationResult> {
         let input = ctx.input();
 
         // validate sql mainly
-        if self.enabled {
-            return match parse_command(input) {
-                Err(crate::command::ParseError::Incomplete(_)) => Ok(ValidationResult::Incomplete),
-                _ => Ok(ValidationResult::Valid(None)),
-            };
+        match parse_command(input) {
+            Err(crate::command::ParseError::Incomplete(_)) => Ok(ValidationResult::Incomplete),
+            _ => Ok(ValidationResult::Valid(None)),
         }
-        Ok(ValidationResult::Valid(None))
     }
 
     fn validate_while_typing(&self) -> bool {
@@ -25,8 +20,14 @@ impl Validator for YspValidator {
     }
 }
 
-impl YspValidator {
-    pub fn new() -> Self {
-        YspValidator { enabled: true }
+impl reedline::Validator for YspValidator {
+    fn validate(&self, line: &str) -> reedline::ValidationResult {
+        let input = line;
+        match parse_command(input) {
+            Err(crate::command::ParseError::Incomplete(_)) => {
+                reedline::ValidationResult::Incomplete
+            }
+            _ => reedline::ValidationResult::Complete,
+        }
     }
 }

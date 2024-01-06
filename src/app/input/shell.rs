@@ -1,24 +1,27 @@
-use std::{cell::RefCell, rc::Rc, sync::RwLock};
+use std::sync::Arc;
+use std::{cell::RefCell, sync::RwLock};
 
+use colored::Colorize;
 use rustyline::{
     history::FileHistory, Cmd, CompletionType, Config, EditMode, Editor, EventHandler, KeyEvent,
 };
-use rustyline::{KeyCode, Modifiers};
+use rustyline::{DefaultEditor, KeyCode, Modifiers};
 
 use crate::command::{parse_command, Command, ParseError};
 
 use crate::app::{context::Context, helper::YspHelper};
 
-use super::{Input, InputError};
+use super::{Input, InputError, INDICATOR};
 
 pub struct ShellInput {
-    context: Rc<RwLock<Context>>,
+    context: Arc<RwLock<Context>>,
     rl: RefCell<Editor<YspHelper, FileHistory>>,
+    rl2: RefCell<DefaultEditor>,
     history_file: String,
 }
 
 impl ShellInput {
-    pub fn new(context: Rc<RwLock<Context>>, history_file: String) -> Result<Self, InputError> {
+    pub fn new(context: Arc<RwLock<Context>>, history_file: String) -> Result<Self, InputError> {
         let config = Config::builder()
             .history_ignore_space(true)
             .completion_type(CompletionType::Circular)
@@ -36,6 +39,7 @@ impl ShellInput {
         let _ = rl.load_history(&history_file);
         Ok(Self {
             rl: RefCell::new(rl),
+            rl2: RefCell::new(DefaultEditor::new()?),
             context,
             history_file,
         })
@@ -44,10 +48,13 @@ impl ShellInput {
 
 impl Input for ShellInput {
     fn get_command(&self) -> Result<Option<(Command, String)>, InputError> {
-        let input = self
-            .rl
-            .borrow_mut()
-            .readline(&self.context.read().unwrap().get_prompt())?;
+        let prompt = match &self.context.read().unwrap().get_prompt() {
+            crate::app::context::Prompt::Ready => format!("SQL{}", INDICATOR),
+            crate::app::context::Prompt::Connected(c) => {
+                format!("{c}{}", INDICATOR).green().to_string()
+            }
+        };
+        let input = self.rl.borrow_mut().readline(&prompt)?;
         let command = match parse_command(&input) {
             Ok(command) => Some((command, input)),
             Err(ParseError::Empty) => None,
@@ -58,10 +65,8 @@ impl Input for ShellInput {
     }
 
     fn line(&self, prompt: &str) -> Result<String, InputError> {
-        let mut rl = self.rl.borrow_mut();
-        rl.helper_mut().unwrap().disable_validation();
+        let mut rl = self.rl2.borrow_mut();
         let input = rl.readline(prompt);
-        rl.helper_mut().unwrap().enable_validation();
         input.map_err(InputError::from)
     }
 }
