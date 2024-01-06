@@ -1,17 +1,21 @@
-use std::{cell::RefCell, rc::Rc, sync::RwLock};
+use std::{
+    cell::RefCell,
+    sync::{Arc, RwLock},
+};
 
+use reedline::{Span, Suggestion};
 use rustyline::completion::{Candidate, Completer};
 
 use super::context::Context;
 
 pub struct YspCompleter {
-    connection: Rc<RwLock<Context>>,
+    connection: Arc<RwLock<Context>>,
     tables: RefCell<Vec<String>>,
     views: RefCell<Vec<String>>,
 }
 
 impl YspCompleter {
-    pub fn new(connection: Rc<RwLock<Context>>) -> Self {
+    pub fn new(connection: Arc<RwLock<Context>>) -> Self {
         Self {
             connection,
             tables: Default::default(),
@@ -20,6 +24,7 @@ impl YspCompleter {
     }
 }
 
+/// For rustyline
 impl Completer for YspCompleter {
     type Candidate = YspCandidate;
 
@@ -30,6 +35,34 @@ impl Completer for YspCompleter {
         ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let _ = (line, pos, ctx);
+
+        Ok((pos, self.get_completions(line)))
+    }
+
+    fn update(
+        &self,
+        line: &mut rustyline::line_buffer::LineBuffer,
+        start: usize,
+        elected: &str,
+        cl: &mut rustyline::Changeset,
+    ) {
+        let end = line.pos();
+        line.replace(start..end, elected, cl);
+    }
+}
+
+impl reedline::Completer for YspCompleter {
+    fn complete(&mut self, line: &str, pos: usize) -> Vec<reedline::Suggestion> {
+        self.get_completions(line)
+            .into_iter()
+            .map(|x| x.into_suggestion(pos))
+            .collect()
+    }
+}
+
+/// Common impl
+impl YspCompleter {
+    pub fn get_completions(&self, line: &str) -> Vec<YspCandidate> {
         let mut results = vec![];
         if let Some(trailing) = line
             .trim_end_matches(';')
@@ -60,23 +93,9 @@ impl Completer for YspCompleter {
                     .map(YspCandidate::Keyword),
             );
         }
-
-        Ok((pos, results))
+        results
     }
 
-    fn update(
-        &self,
-        line: &mut rustyline::line_buffer::LineBuffer,
-        start: usize,
-        elected: &str,
-        cl: &mut rustyline::Changeset,
-    ) {
-        let end = line.pos();
-        line.replace(start..end, elected, cl);
-    }
-}
-
-impl YspCompleter {
     pub fn complete_query(&self, trailing: &str) -> Vec<YspCandidate> {
         let mut results = vec![];
         if self.tables.take().is_empty() {
@@ -161,6 +180,7 @@ pub enum YspCandidate {
     Column(String),
 }
 
+/// For rustyline
 impl Candidate for YspCandidate {
     fn display(&self) -> &str {
         match self {
@@ -177,6 +197,23 @@ impl Candidate for YspCandidate {
             | YspCandidate::Table(v)
             | YspCandidate::View(v)
             | YspCandidate::Column(v) => v,
+        }
+    }
+}
+
+impl YspCandidate {
+    pub fn into_suggestion(self, pos: usize) -> Suggestion {
+        match self {
+            YspCandidate::Keyword(v)
+            | YspCandidate::Table(v)
+            | YspCandidate::View(v)
+            | YspCandidate::Column(v) => Suggestion {
+                value: v,
+                description: None,
+                extra: None,
+                span: Span::new(pos, pos + 1),
+                append_whitespace: false,
+            },
         }
     }
 }

@@ -1,7 +1,8 @@
 use colored::Colorize;
+use reedline::StyledText;
 use rustyline::highlight::Highlighter;
 use syntect::easy::HighlightLines;
-use syntect::highlighting::{Style, Theme, ThemeSet};
+use syntect::highlighting::{FontStyle, Style, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::as_24_bit_terminal_escaped;
 
@@ -33,4 +34,41 @@ impl Highlighter for YspHightligter {
         escaped.push_str("\x1b[0m");
         std::borrow::Cow::Owned(escaped)
     }
+}
+
+impl reedline::Highlighter for YspHightligter {
+    fn highlight(&self, line: &str, _cursor: usize) -> reedline::StyledText {
+        let syntax_set = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
+        let theme = ts.themes["base16-ocean.dark"].clone();
+
+        let syntax: &syntect::parsing::SyntaxReference =
+            syntax_set.find_syntax_by_extension("sql").unwrap();
+        let mut h = HighlightLines::new(syntax, &theme);
+        let ranges = h.highlight_line(line, &syntax_set).unwrap();
+        StyledText {
+            buffer: ranges
+                .iter()
+                .map(|(st, str)| {
+                    let mut style = nu_ansi_term::Style::new()
+                        .fg(hl_color_to_nu_color(st.foreground))
+                        .on(hl_color_to_nu_color(st.background));
+                    if st.font_style.contains(FontStyle::BOLD) {
+                        style = style.bold();
+                    }
+                    if st.font_style.contains(FontStyle::ITALIC) {
+                        style = style.italic();
+                    }
+                    if st.font_style.contains(FontStyle::UNDERLINE) {
+                        style = style.underline();
+                    }
+                    (style, str.to_string())
+                })
+                .collect::<Vec<_>>(),
+        }
+    }
+}
+
+fn hl_color_to_nu_color(color: syntect::highlighting::Color) -> nu_ansi_term::Color {
+    nu_ansi_term::Color::Rgb(color.r, color.g, color.b)
 }

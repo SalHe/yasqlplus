@@ -1,4 +1,4 @@
-use std::{rc::Rc, sync::RwLock};
+use std::sync::{Arc, RwLock};
 
 use rustyline::{hint::HistoryHinter, Completer, Helper, Highlighter, Hinter, Validator};
 
@@ -19,20 +19,12 @@ pub struct YspHelper {
 }
 
 impl YspHelper {
-    pub fn new(context: Rc<RwLock<Context>>) -> Self {
+    pub fn new(context: Arc<RwLock<Context>>) -> Self {
         YspHelper {
-            validator: YspValidator::new(),
+            validator: YspValidator,
             hinter: HistoryHinter::new(),
             hightligter: YspHightligter::new(),
             completer: YspCompleter::new(context),
         }
-    }
-
-    pub fn disable_validation(&mut self) {
-        self.validator.enabled = false;
-    }
-
-    pub fn enable_validation(&mut self) {
-        self.validator.enabled = true;
     }
 }
