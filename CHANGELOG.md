@@ -2,12 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2024-01-16
+
+### Bug Fixes
+
+- Order of dropping handle
+
 ## [0.1.1] - 2024-01-05
 
 ### Bug Fixes
 
 - Ignore single line comment
 - Multi line paste
+
+### Documentation
+
+- CHANGELOG.md
 
 ### Features
 

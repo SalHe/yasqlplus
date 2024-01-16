@@ -3,8 +3,8 @@ use crate::native::{yacConnect, yacDisconnect, EnYacResult_YAC_ERROR};
 use super::{DbcHandle, EnvHandle, Error, Statement, StatementHandle};
 
 pub struct Connection {
-    _env_handle: EnvHandle,
     conn_handle: DbcHandle,
+    _env_handle: EnvHandle, // must be dropped after `conn_handle`
 }
 
 impl Connection {

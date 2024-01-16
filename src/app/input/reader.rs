@@ -7,7 +7,7 @@ use crate::command::{parse_command, Command, ParseError};
 
 use super::{Input, InputError};
 
-pub struct BufReaderInput<R: ?Sized + Read> {
+pub struct BufReaderInput<R: Read> {
     reader: RefCell<BufReader<R>>,
 }
 
