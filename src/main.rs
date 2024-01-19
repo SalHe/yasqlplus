@@ -1,8 +1,13 @@
-use std::{fs::File, io::BufReader, path::PathBuf, rc::Rc, sync::RwLock};
+use std::{
+    fs::File,
+    io::{BufReader, IsTerminal},
+    path::PathBuf,
+    sync::{Arc, RwLock},
+};
 
 use app::{
     context::Context,
-    input::{BufReaderInput, Input, ShellInput, SingleCommand},
+    input::{BufReaderInput, Input, Reed, ShellInput, SingleCommand},
     AppError,
 };
 use clap::Parser;
@@ -71,6 +76,11 @@ struct Cli {
     /// History file name.
     #[arg(short = 'F', long, default_value = "yasqlplus-history.txt")]
     history_file: String,
+
+    /// Use reedline as line editor.
+    /// EXPERIMENTAL FEATURE.
+    #[arg(long, verbatim_doc_comment)]
+    reedline: bool,
 }
 
 fn main() -> Result<(), AppError> {
@@ -80,22 +90,25 @@ fn main() -> Result<(), AppError> {
     ctx.set_need_echo(args.echo);
     ctx.set_less_enabled(!args.no_less);
 
-    let ctx = Rc::new(RwLock::new(ctx));
+    let history_file = args
+        .history_path
+        .map(PathBuf::from)
+        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default())
+        .join(args.history_file)
+        .to_str()
+        .unwrap()
+        .to_owned();
+
+    let stdin = std::io::stdin();
+    let ctx = Arc::new(RwLock::new(ctx));
     let input: Box<dyn Input> = match args.command {
         Some(command) => Box::new(SingleCommand::new(command)),
+        None if !stdin.is_terminal() => Box::new(BufReaderInput::new(BufReader::new(stdin))),
         None => match args.file {
             // TODO support network file(e.g. http/https)
             Some(input) => Box::new(BufReaderInput::new(BufReader::new(File::open(input)?))),
-            None => Box::new(ShellInput::new(
-                ctx.clone(),
-                args.history_path
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| dirs::home_dir().unwrap_or_default())
-                    .join(args.history_file)
-                    .to_str()
-                    .unwrap()
-                    .to_owned(),
-            )?),
+            None if args.reedline => Box::new(Reed::new(ctx.clone(), history_file)?),
+            None => Box::new(ShellInput::new(ctx.clone(), history_file)?),
         },
     };
     let mut app = app::App::new(input, ctx)?;

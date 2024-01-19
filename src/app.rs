@@ -1,4 +1,8 @@
-use std::{io::Write, process::Stdio, rc::Rc, sync::RwLock};
+use std::{
+    io::Write,
+    process::Stdio,
+    sync::{Arc, RwLock},
+};
 
 use colored::Colorize;
 
@@ -13,7 +17,10 @@ use tabled::{
 use terminal_size::{terminal_size, Height, Width};
 use yasqlplus_client::wrapper::{Connection, DiagInfo, Error, Executed, LazyExecuted};
 
-use crate::command::{self, Command, InternalCommand, ParseError};
+use crate::{
+    app::input::INDICATOR,
+    command::{self, Command, InternalCommand, ParseError},
+};
 
 use self::{
     context::Context,
@@ -31,7 +38,7 @@ pub mod context;
 pub mod input;
 
 pub struct App {
-    context: Rc<RwLock<Context>>,
+    context: Arc<RwLock<Context>>,
     input: Box<dyn Input>,
 }
 
@@ -48,7 +55,7 @@ pub enum AppError {
 }
 
 impl App {
-    pub fn new(input: Box<dyn Input>, context: Rc<RwLock<Context>>) -> Result<Self, AppError> {
+    pub fn new(input: Box<dyn Input>, context: Arc<RwLock<Context>>) -> Result<Self, AppError> {
         Ok(App { input, context })
     }
 
@@ -86,7 +93,15 @@ impl App {
         ctx.set_command(command);
 
         if ctx.need_echo() {
-            println!("{}{}", ctx.get_prompt(), command_str.unwrap_or_default());
+            let start = format!("{}{}", ctx.get_prompt().to_string(), INDICATOR);
+            let rest_start = format!(
+                "{}{}",
+                ".".repeat(ctx.get_prompt().to_string().chars().count()),
+                " ".repeat(INDICATOR.chars().count())
+            );
+            for (idx, line) in command_str.unwrap_or_default().lines().enumerate() {
+                println!("{}{}", if idx == 0 { &start } else { &rest_start }, line);
+            }
         }
 
         let command = ctx.get_command();
@@ -120,11 +135,12 @@ impl App {
                     match self.connect(host.clone(), *port, username.clone(), password.clone()) {
                         Ok((conn, prompt)) => {
                             ctx.set_connection(Some(conn));
-                            ctx.set_prompt(prompt);
+                            ctx.set_prompt(context::Prompt::Connected(prompt));
                             println!("Connected!");
                         }
                         Err(err) => {
                             ctx.set_connection(None);
+                            ctx.set_prompt(context::Prompt::Ready);
                             println!("Failed to connect: ");
                             self.print_execute_sql_error(err)?;
                         }
@@ -340,7 +356,7 @@ impl App {
             None => self.input.line("Password: ").unwrap_or_default(),
         };
         match Connection::connect(&host, port, &username, &password) {
-            Ok(conn) => Ok((conn, format!("{username}@{host}:{port} > "))),
+            Ok(conn) => Ok((conn, format!("{username}@{host}:{port}"))),
             Err(err) => Err(err),
         }
     }
